@@ -14,32 +14,33 @@ This Laravel package extends Coolify with fine-grained access control:
 
 - **Project-level permissions**: Grant users access to specific projects only
 - **Permission levels**: View Only, Deploy, Full Access
-- **New Viewer role**: Read-only access for stakeholders
-- **Environment overrides**: Fine-tune access per environment
+- **Environment overrides**: Fine-tune access per environment within each project
+- **Access Matrix UI**: Unified table to manage all users, projects, and environments at a glance
 - **API support**: Full REST API for permission management
+- **Install/Uninstall scripts**: Automated setup with Coolify detection
 - **Backward compatible**: Feature flag for safe rollout
 
 ## Requirements
 
 - Coolify v4.x
 - Docker & Docker Compose
-- Access to build custom Docker images
+- Root access to the Coolify server
 
 ## Installation
 
-### Option 1: Using Pre-built Docker Image (Recommended)
-
-Pre-built images are automatically published to GitHub Container Registry on every release.
+### Quick Install (Recommended)
 
 ```bash
-# Pull the latest image
-docker pull ghcr.io/amirhmoradi/coolify-granular-permissions:latest
-
-# Update your Coolify deployment
-cd /data/coolify/source
+git clone https://github.com/amirhmoradi/coolify-granular-permissions.git
+cd coolify-granular-permissions
+sudo bash install.sh
 ```
 
-Create or edit `docker-compose.override.yml`:
+The installer will detect your Coolify installation, pull the pre-built image, deploy `docker-compose.custom.yml`, and restart the stack.
+
+### Manual Install
+
+Create `/data/coolify/source/docker-compose.custom.yml`:
 
 ```yaml
 services:
@@ -49,36 +50,51 @@ services:
       - COOLIFY_GRANULAR_PERMISSIONS=true
 ```
 
+Restart Coolify:
+
+```bash
+cd /data/coolify/source
+bash upgrade.sh
+```
+
+> **Note:** Coolify natively supports `docker-compose.custom.yml` — it is automatically merged with the main compose file and survives upgrades.
+
+### Build Locally
+
+```bash
+git clone https://github.com/amirhmoradi/coolify-granular-permissions.git
+cd coolify-granular-permissions
+sudo bash install.sh --local
+```
+
+Or build manually:
+
+```bash
+docker build \
+  --build-arg COOLIFY_VERSION=latest \
+  -t coolify-custom:latest \
+  -f docker/Dockerfile .
+```
+
 **Available Image Tags:**
 - `latest` - Latest stable release (built against latest Coolify)
 - `vX.Y.Z` - Specific release version (e.g., `v1.0.0`)
 - `coolify-X.Y.Z` - Built against specific Coolify version (e.g., `coolify-4.0.0-beta.365`)
 - `sha-XXXXXX` - Specific commit SHA for traceability
 
-Restart Coolify:
+## Uninstallation
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d
+sudo bash uninstall.sh
 ```
 
-### Option 2: Build Your Own Image
+The uninstaller will:
+- Optionally clean up database tables (prompted)
+- Remove `docker-compose.custom.yml` (with backup)
+- Remove environment variables
+- Restart Coolify with the original image
 
-```bash
-# Clone this repository
-git clone https://github.com/amirhmoradi/coolify-granular-permissions.git
-cd coolify-granular-permissions
-
-# Build the Docker image
-docker build \
-  --build-arg COOLIFY_VERSION=latest \
-  -t coolify-custom:latest \
-  -f docker/Dockerfile \
-  .
-
-# Push to your registry
-docker tag coolify-custom:latest your-registry/coolify-custom:latest
-docker push your-registry/coolify-custom:latest
-```
+For manual uninstall, see [Installation Guide](docs/installation.md#reverting-to-original-coolify).
 
 ## Configuration
 
@@ -105,18 +121,17 @@ This creates `config/coolify-permissions.php` with options for:
 
 ## Usage
 
-### Web UI
+### Access Matrix UI
 
-1. **Admin Users Page** (`/admin/users`)
-   - Create new users
-   - Assign users to teams
-   - Toggle global admin status
-   - Suspend/unsuspend users
+The access management interface is injected into Coolify's existing **Team > Admin** page. Navigate to `/team/admin` as an admin or owner to see the **Granular Access Management** section.
 
-2. **Project Access Page** (`/project/{uuid}/access`)
-   - Grant users access to specific projects
-   - Set permission levels (View Only, Deploy, Full Access)
-   - Bulk grant/revoke access
+The Access Matrix provides:
+- A unified table showing all users, projects, and environments
+- Per-cell permission dropdowns (None, View Only, Deploy, Full Access)
+- Environment-level inheritance from project permissions with optional overrides
+- **All/None** buttons per-row (set all resources for a user) and per-column (set all users for a resource)
+- Search/filter for users
+- Visual indicators for role bypass (owner/admin), inheritance, and permission levels
 
 ### API Endpoints
 
@@ -142,9 +157,9 @@ curl -X POST "https://your-coolify.com/api/v1/projects/abc123/access" \
 
 | Level | View | Deploy | Manage | Delete |
 |-------|------|--------|--------|--------|
-| `view_only` | ✅ | ❌ | ❌ | ❌ |
-| `deploy` | ✅ | ✅ | ❌ | ❌ |
-| `full_access` | ✅ | ✅ | ✅ | ✅ |
+| `view_only` | Yes | No | No | No |
+| `deploy` | Yes | Yes | No | No |
+| `full_access` | Yes | Yes | Yes | Yes |
 
 ## Role Hierarchy
 
@@ -160,51 +175,64 @@ curl -X POST "https://your-coolify.com/api/v1/projects/abc123/access" \
 ### Permission Check Flow
 
 ```
-User Action → Policy Check → Is Granular Enabled?
-                                    │
-                    ┌───────────────┴───────────────┐
-                    │ No                            │ Yes
-                    ▼                               ▼
+User Action -> Policy Check -> Is Granular Enabled?
+                                    |
+                    +---------------+---------------+
+                    | No                            | Yes
+                    v                               v
               Allow (v4 default)           Check User Role
-                                                    │
-                                    ┌───────────────┴───────────────┐
-                                    │ Owner/Admin                   │ Member/Viewer
-                                    ▼                               ▼
+                                                    |
+                                    +---------------+---------------+
+                                    | Owner/Admin                   | Member/Viewer
+                                    v                               v
                               Allow (bypass)              Check Project Access
-                                                                    │
-                                                    ┌───────────────┴───────────────┐
-                                                    │ Has Access                    │ No Access
-                                                    ▼                               ▼
+                                                                    |
+                                                    +---------------+---------------+
+                                                    | Has Access                    | No Access
+                                                    v                               v
                                               Check Permission                   Deny
-                                                    │
-                                            ┌───────┴───────┐
-                                            │ Has Perm      │ No Perm
-                                            ▼               ▼
+                                                    |
+                                            +-------+-------+
+                                            | Has Perm      | No Perm
+                                            v               v
                                           Allow           Deny
+```
+
+### Access Matrix
+
+```
++----------+-----------+-----------+-------+-------+-----------+------+
+| User     | Role      | Project A               | Project B          |
+|          |           | Project | Prod  | Stage | Project | Dev    |
++----------+-----------+---------+-------+-------+---------+--------+
+| John     | owner     | bypass  |bypass |bypass | bypass  |bypass  |
+| Jane     | member    | full    | inh.  | dep.  | view    | inh.   |
+| Bob      | viewer    | none    | none  | view  | deploy  | inh.   |
++----------+-----------+---------+-------+-------+---------+--------+
 ```
 
 ### Database Schema
 
 ```
-┌──────────────┐       ┌──────────────┐       ┌──────────────┐
-│    users     │       │ project_user │       │   projects   │
-├──────────────┤       ├──────────────┤       ├──────────────┤
-│ id           │──┐    │ id           │    ┌──│ id           │
-│ name         │  │    │ user_id      │────┘  │ name         │
-│ email        │  └────│ project_id   │───────│ team_id      │
-│ is_global_   │       │ permissions  │       └──────────────┘
-│   admin      │       └──────────────┘
-│ status       │
-└──────────────┘
++---------------+       +---------------+       +---------------+
+|    users      |       | project_user  |       |   projects    |
++---------------+       +---------------+       +---------------+
+| id            |--+    | id            |    +--| id            |
+| name          |  |    | user_id       |----+  | name          |
+| email         |  +----| project_id    |-------| team_id       |
+| is_global_    |       | permissions   |       +---------------+
+|   admin       |       +---------------+
+| status        |
++---------------+
 
-┌──────────────────┐
-│ environment_user │
-├──────────────────┤
-│ id               │
-│ user_id          │
-│ environment_id   │
-│ permissions      │
-└──────────────────┘
++-------------------+
+| environment_user  |
++-------------------+
+| id                |
+| user_id           |
+| environment_id    |
+| permissions       |
++-------------------+
 ```
 
 ## Upgrading Coolify
@@ -226,38 +254,20 @@ docker build \
 
 ## Reverting to Original Coolify
 
-You can safely revert to the original Coolify image at any time. **Reverting is non-destructive** - your projects, users, and data remain intact.
+```bash
+sudo bash uninstall.sh
+```
 
-### Quick Revert
+Or manually:
 
 ```bash
 cd /data/coolify/source
-
-# If using docker-compose.override.yml (recommended method)
-rm docker-compose.override.yml
-
-# Remove environment variable
+rm docker-compose.custom.yml
 sed -i '/COOLIFY_GRANULAR_PERMISSIONS/d' .env
-
-# Restart with original image
-docker compose down && docker compose up -d
+bash upgrade.sh
 ```
 
-### What Happens After Reverting
-
-| Component | Status |
-|-----------|--------|
-| Core Coolify | ✅ Works normally |
-| Projects & deployments | ✅ Fully preserved |
-| Users & teams | ✅ Fully preserved |
-| Permission settings | ⚠️ Stored but not enforced |
-| Permission UI/API | ❌ Not available |
-
-All team members will have full access to all projects (standard Coolify v4 behavior).
-
-### Re-enabling Later
-
-Your permission data is preserved in the database. Simply reinstall the custom image and your settings will be restored.
+**Reverting is non-destructive** - your projects, users, and data remain intact. All team members will have full access to all projects (standard Coolify v4 behavior).
 
 For detailed instructions including database cleanup options, see the [Installation Guide](docs/installation.md#reverting-to-original-coolify).
 

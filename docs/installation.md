@@ -11,18 +11,29 @@ This guide covers all methods of installing the Coolify Granular Permissions pac
 
 ## Quick Start (Recommended)
 
-The fastest way to install is using the pre-built Docker image method.
+The fastest way to install is using the automated installer script.
 
-### 1. Stop Coolify
+### Automated Install
 
 ```bash
-cd /data/coolify/source
-docker compose down
+git clone https://github.com/amirhmoradi/coolify-granular-permissions.git
+cd coolify-granular-permissions
+sudo bash install.sh
 ```
 
-### 2. Create Override File
+The script will:
+1. Verify your Coolify installation at `/data/coolify/source/`
+2. Pull the pre-built image from GHCR (or build locally with `--local`)
+3. Create `docker-compose.custom.yml` (Coolify natively supports this file)
+4. Set the `COOLIFY_GRANULAR_PERMISSIONS=true` environment variable
+5. Restart Coolify via `upgrade.sh`
+6. Verify the installation
 
-Create or edit `/data/coolify/source/docker-compose.override.yml`:
+### Manual Install
+
+#### 1. Create Custom Compose File
+
+Create `/data/coolify/source/docker-compose.custom.yml`:
 
 ```yaml
 services:
@@ -32,34 +43,37 @@ services:
       - COOLIFY_GRANULAR_PERMISSIONS=true
 ```
 
-### 3. Start Coolify
+> **Note:** Coolify's install/upgrade scripts natively support `docker-compose.custom.yml`. This file is merged with the main compose file and survives Coolify updates.
+
+#### 2. Restart Coolify
 
 ```bash
-docker compose up -d
+cd /data/coolify/source
+bash upgrade.sh
 ```
 
-### 4. Verify Installation
+#### 3. Verify Installation
 
-1. Log into Coolify
-2. Check for "User Management" in admin settings
-3. Check for "Access" tab in project settings
+1. Log into Coolify as an admin or owner
+2. Navigate to **Team > Admin** to see the Access Matrix below the admin content
+3. Configure per-user project and environment permissions
 
 ---
 
 ## Installation Methods
 
-### Method 1: Docker Compose Override (Recommended)
+### Method 1: Docker Compose Custom File (Recommended)
 
 Best for: Simple installations, easy updates
 
 **Pros:**
 - No custom builds required
 - Easy to update
-- Survives Coolify updates
+- Survives Coolify updates (docker-compose.custom.yml is not overwritten)
 
 **Steps:**
 
-1. Create override file as shown in Quick Start
+1. Create the custom compose file as shown in Quick Start
 2. Pull the latest image:
    ```bash
    docker pull ghcr.io/amirhmoradi/coolify-granular-permissions:latest
@@ -67,41 +81,10 @@ Best for: Simple installations, easy updates
 3. Restart Coolify:
    ```bash
    cd /data/coolify/source
-   docker compose up -d
+   bash upgrade.sh
    ```
 
-### Method 2: Modify docker-compose.prod.yml
-
-Best for: Permanent installations, more control
-
-**Pros:**
-- All configuration in one file
-- Clear visibility of changes
-
-**Cons:**
-- May be overwritten by Coolify updates
-
-**Steps:**
-
-1. Edit `/data/coolify/source/docker-compose.prod.yml`
-2. Change the coolify service image:
-   ```yaml
-   services:
-     coolify:
-       # Change from:
-       # image: "ghcr.io/coollabsio/coolify:${LATEST_IMAGE:-latest}"
-       # To:
-       image: "ghcr.io/amirhmoradi/coolify-granular-permissions:latest"
-       environment:
-         # Add this line:
-         - COOLIFY_GRANULAR_PERMISSIONS=true
-   ```
-3. Restart:
-   ```bash
-   docker compose down && docker compose up -d
-   ```
-
-### Method 3: Build Custom Image Locally
+### Method 2: Build Custom Image Locally
 
 Best for: Custom modifications, air-gapped environments
 
@@ -125,7 +108,7 @@ Best for: Custom modifications, air-gapped environments
      -f docker/Dockerfile .
    ```
 
-3. Update docker-compose to use local image:
+3. Create `/data/coolify/source/docker-compose.custom.yml`:
    ```yaml
    services:
      coolify:
@@ -134,11 +117,16 @@ Best for: Custom modifications, air-gapped environments
          - COOLIFY_GRANULAR_PERMISSIONS=true
    ```
 
-4. Start Coolify:
+4. Restart Coolify:
    ```bash
    cd /data/coolify/source
-   docker compose up -d
+   bash upgrade.sh
    ```
+
+Or use the automated installer:
+```bash
+sudo bash install.sh --local
+```
 
 ---
 
@@ -213,7 +201,7 @@ docker exec coolify php artisan package:discover
 
 Look for `amirhmoradi/coolify-granular-permissions` in the output.
 
-### Check Routes are Registered
+### Check API Routes are Registered
 
 ```bash
 docker exec coolify php artisan route:list | grep permissions
@@ -250,8 +238,8 @@ Should output `bool(true)` if enabled.
 
 ```bash
 cd /data/coolify/source
-docker compose pull coolify
-docker compose up -d
+docker pull ghcr.io/amirhmoradi/coolify-granular-permissions:latest
+bash upgrade.sh
 ```
 
 ### Self-built Image
@@ -265,7 +253,7 @@ docker build \
   -f docker/Dockerfile .
 
 cd /data/coolify/source
-docker compose up -d
+bash upgrade.sh
 ```
 
 ---
@@ -287,14 +275,13 @@ This package is designed to be **non-destructive**:
 
 | Component | After Reverting | Notes |
 |-----------|-----------------|-------|
-| Core Coolify functionality | ✅ **Works normally** | No impact whatsoever |
-| Projects, resources, deployments | ✅ **Fully preserved** | All your data remains intact |
-| Users and teams | ✅ **Fully preserved** | User accounts work as before |
-| Team roles (Owner, Admin, Member) | ✅ **Work normally** | Standard Coolify role behavior |
-| Granular permission settings | ⚠️ **Stored but not enforced** | Data remains in DB tables |
-| Permission UI (Access tabs) | ❌ **Not available** | UI components not in original image |
-| User Management admin page | ❌ **Not available** | Admin features not in original image |
-| Permission API endpoints | ❌ **Not available** | API routes not registered |
+| Core Coolify functionality | Works normally | No impact whatsoever |
+| Projects, resources, deployments | Fully preserved | All your data remains intact |
+| Users and teams | Fully preserved | User accounts work as before |
+| Team roles (Owner, Admin, Member) | Work normally | Standard Coolify role behavior |
+| Granular permission settings | Stored but not enforced | Data remains in DB tables |
+| Access Matrix UI | Not available | UI not in original image |
+| Permission API endpoints | Not available | API routes not registered |
 
 **Key point:** All team members will have full access to all projects (standard Coolify v4 behavior) after reverting.
 
@@ -302,96 +289,31 @@ This package is designed to be **non-destructive**:
 
 ### Revert Instructions
 
-#### Option A: Quick Disable (Keep Package Installed)
-
-If you want to temporarily disable granular permissions while keeping the custom image:
+#### Automated Uninstall (Recommended)
 
 ```bash
-# Edit /data/coolify/source/.env
-# Change to:
-COOLIFY_GRANULAR_PERMISSIONS=false
-
-# Restart Coolify
-cd /data/coolify/source
-docker compose restart coolify
+sudo bash uninstall.sh
 ```
 
-**Result:** Package remains installed but permissions are not enforced. All users get full access.
+The script will:
+1. Optionally clean up database tables (prompted)
+2. Remove `docker-compose.custom.yml` (with backup)
+3. Remove the environment variable from `.env`
+4. Restart Coolify via `upgrade.sh`
 
----
-
-#### Option B: Full Revert (Return to Original Image)
-
-##### If using docker-compose.override.yml (Recommended method)
+#### Manual Uninstall
 
 ```bash
 cd /data/coolify/source
 
-# Option 1: Delete the override file entirely
-rm docker-compose.override.yml
+# Remove the custom compose file
+rm docker-compose.custom.yml
 
-# Option 2: Or edit it to use original image
-cat > docker-compose.override.yml << 'EOF'
-services:
-  coolify:
-    image: "ghcr.io/coollabsio/coolify:latest"
-EOF
-
-# Remove the environment variable (optional but recommended)
+# Remove the environment variable
 sed -i '/COOLIFY_GRANULAR_PERMISSIONS/d' .env
 
-# Restart Coolify
-docker compose down
-docker compose up -d
-```
-
-##### If using modified docker-compose.prod.yml
-
-```bash
-cd /data/coolify/source
-
-# Edit docker-compose.prod.yml and change:
-#   image: "ghcr.io/amirhmoradi/coolify-granular-permissions:latest"
-# Back to:
-#   image: "ghcr.io/coollabsio/coolify:${LATEST_IMAGE:-latest}"
-
-# Also remove the COOLIFY_GRANULAR_PERMISSIONS environment variable
-
-# Remove from .env as well
-sed -i '/COOLIFY_GRANULAR_PERMISSIONS/d' .env
-
-# Restart Coolify
-docker compose down
-docker compose up -d
-```
-
-##### If using self-built local image
-
-```bash
-cd /data/coolify/source
-
-# Update your docker-compose to use original image:
-#   image: "ghcr.io/coollabsio/coolify:latest"
-
-# Remove environment variable
-sed -i '/COOLIFY_GRANULAR_PERMISSIONS/d' .env
-
-# Restart
-docker compose down
-docker compose up -d
-```
-
----
-
-### Verify Revert Was Successful
-
-```bash
-# Check which image is running
-docker inspect coolify --format='{{.Config.Image}}'
-# Should show: ghcr.io/coollabsio/coolify:latest (or similar)
-
-# Verify Coolify is working
-docker logs coolify --tail 50
+# Restart Coolify with original image
+bash upgrade.sh
 ```
 
 ---
@@ -465,8 +387,8 @@ If you revert and later decide to use granular permissions again:
 ### Package Not Loading
 
 **Symptoms:**
-- No "Access" tab in projects
-- No "User Management" in admin
+- No Access Matrix on the Team > Admin page
+- API endpoints return 404
 
 **Solutions:**
 1. Check container logs:
@@ -482,6 +404,11 @@ If you revert and later decide to use granular permissions again:
 3. Verify image:
    ```bash
    docker inspect coolify | grep Image
+   ```
+4. Verify docker-compose.custom.yml is loaded:
+   ```bash
+   cd /data/coolify/source
+   docker compose config | grep image
    ```
 
 ### Migrations Not Running
@@ -530,7 +457,7 @@ If you revert and later decide to use granular permissions again:
 **Solutions:**
 1. Grant access to existing team members (this should happen automatically via migration)
 2. Check user's team role (owner/admin bypasses all checks)
-3. Manually grant access via UI or API
+3. Manually grant access via the Access Matrix or API
 
 ---
 

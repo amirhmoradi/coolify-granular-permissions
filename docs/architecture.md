@@ -166,16 +166,40 @@ Application Boot
 CoolifyPermissionsServiceProvider::register()
       │
       ├── Merge configuration
-      ├── Register PermissionService singleton
       │
       ▼
 CoolifyPermissionsServiceProvider::boot()
       │
       ├── Load migrations
       ├── Load views with namespace
-      ├── Load routes (web & api)
-      ├── Register Livewire components
-      └── Override policies via Gate::policy()
+      ├── Load API routes
+      ├── Register Livewire components (AccessMatrix)
+      ├── Register InjectPermissionsUI middleware
+      ├── Override policies via Gate::policy()
+      └── Extend User model with permission macros
+```
+
+### UI Injection Mechanism
+
+The package injects its Access Matrix UI into Coolify's existing `/team/admin` page using HTTP middleware:
+
+```
+HTTP Request to /team/admin
+      │
+      ▼
+InjectPermissionsUI middleware
+      │
+      ├── Is team page? ──── No → Pass through
+      │ Yes
+      ├── Is HTML response? ── No → Pass through
+      │ Yes
+      ├── Is user admin/owner? ── No → Pass through
+      │ Yes
+      ├── Render AccessMatrix Livewire component via Blade::render()
+      └── Inject rendered HTML before </body>
+            │
+            ▼
+      Positioning script moves component to correct location in DOM
 ```
 
 ### Policy Override Mechanism
@@ -183,7 +207,7 @@ CoolifyPermissionsServiceProvider::boot()
 The package uses Laravel's `Gate::policy()` to override Coolify's default policies:
 
 ```php
-// In CoolifyPermissionsServiceProvider::bootPolicies()
+// In CoolifyPermissionsServiceProvider::registerPolicies()
 Gate::policy(Application::class, ApplicationPolicy::class);
 Gate::policy(Project::class, ProjectPolicy::class);
 // ... etc
@@ -216,9 +240,37 @@ $permissions = Cache::remember($cacheKey, 300, function () use ($user, $project)
 });
 ```
 
-## Docker Integration
+## Installation & Deployment
 
-### Image Build Process
+### Install/Uninstall Scripts
+
+The package includes automated scripts for managing installation:
+
+```
+install.sh
+      │
+      ├── Check prerequisites (root, Docker, Compose)
+      ├── Detect Coolify at /data/coolify/source/
+      ├── Pull GHCR image or build locally (--local)
+      ├── Create docker-compose.custom.yml
+      ├── Set COOLIFY_GRANULAR_PERMISSIONS=true in .env
+      ├── Run upgrade.sh to restart stack
+      └── Verify installation
+
+uninstall.sh
+      │
+      ├── Optionally clean database tables (prompted)
+      ├── Remove docker-compose.custom.yml (with backup)
+      ├── Remove env var from .env
+      ├── Run upgrade.sh to restart stack
+      └── Optionally remove local Docker images
+```
+
+### Docker Compose Custom File
+
+Coolify natively supports `docker-compose.custom.yml` at `/data/coolify/source/`. This file is automatically merged with the main compose configuration and survives Coolify upgrades.
+
+### Docker Image Build Process
 
 ```
 Official Coolify Image

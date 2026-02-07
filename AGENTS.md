@@ -12,6 +12,7 @@ This is a **Laravel package** that extends Coolify v4 with granular user role an
 2. **Feature-flagged** - Controlled by `COOLIFY_GRANULAR_PERMISSIONS=true`
 3. **Backward compatible** - When disabled, Coolify behaves normally
 4. **Docker-deployed** - Installed via custom Docker image extending official Coolify
+5. **UI injection** - Access Matrix is injected into Coolify's `/team/admin` page via middleware
 
 ## Architecture
 
@@ -22,7 +23,7 @@ Team Role (owner/admin) → Bypasses all checks
          ↓
   Project Access → Defined in project_user table
          ↓
-Environment Override → Optional overrides in environment_user table
+Environment Override → Optional overrides in environment_user table (inherits from project by default)
 ```
 
 ### Permission Levels
@@ -45,15 +46,19 @@ Environment Override → Optional overrides in environment_user table
 ### Service Provider (`CoolifyPermissionsServiceProvider.php`)
 
 The main entry point that:
-- Loads package configuration, migrations, views, and routes
-- Registers Livewire components with namespaced prefixes
+- Loads package configuration, migrations, and views
+- Loads API routes (web routes removed in favor of middleware injection)
+- Registers the `AccessMatrix` Livewire component
+- Registers `InjectPermissionsUI` middleware for UI injection
 - Overrides Coolify's default policies with permission-aware versions
 - Extends User model with permission-checking macros
 
 **Key methods:**
-- `register()` - Merges config, registers PermissionService singleton
+- `register()` - Merges config
 - `boot()` - Loads all package resources, registers policies
-- `bootPolicies()` - Overrides Gate policies for all resource types
+- `registerLivewireComponents()` - Registers `permissions::access-matrix` component
+- `registerMiddleware()` - Pushes `InjectPermissionsUI` as global middleware
+- `registerPolicies()` - Overrides Gate policies for all resource types
 
 ### Permission Service (`Services/PermissionService.php`)
 
@@ -74,20 +79,41 @@ hasEnvironmentPermission(User $user, Environment $environment, string $permissio
 canPerform(User $user, $resource, string $permission): bool
 
 // Check if user has owner/admin bypass
-hasRoleBypass(User $user, Team $team): bool
+hasRoleBypass(User $user): bool
 ```
 
 ### Models
 
 **ProjectUser** (`Models/ProjectUser.php`)
 - Pivot model for project access
-- Stores permission flags (can_view, can_deploy, can_manage, can_delete)
+- Stores permission flags as JSON: `{"view":bool,"deploy":bool,"manage":bool,"delete":bool}`
 - Helper methods: `getPermissionsForLevel()`, `getPermissionLevel()`
 
 **EnvironmentUser** (`Models/EnvironmentUser.php`)
 - Optional environment-level permission overrides
-- Same permission flags as ProjectUser
+- Same permission structure as ProjectUser
 - When present, overrides project-level permissions for that environment
+- When absent, project-level permissions cascade down
+
+### Middleware
+
+**InjectPermissionsUI** (`Http/Middleware/InjectPermissionsUI.php`)
+- Global HTTP middleware that intercepts responses
+- On `/team` and `/team/*` pages, injects the AccessMatrix Livewire component
+- Only injects for authenticated users with admin/owner roles
+- Uses `Blade::render()` to server-side render the Livewire component
+- Includes a positioning script to place the UI within the existing page structure
+
+### Livewire Components
+
+**AccessMatrix** (`Livewire/AccessMatrix.php`)
+- Unified permission management component
+- Displays a matrix of users × (projects + environments)
+- Each cell is a permission level dropdown
+- Supports bulk operations: All/None per row and per column
+- Environment cells show "inherited" when using project-level cascade
+- Users with owner/admin role show "bypass" (non-editable)
+- Search/filter for users
 
 ### Policies
 
@@ -96,10 +122,10 @@ All policies follow the same pattern:
 ```php
 public function view(User $user, Model $resource): bool
 {
-    if (!$this->permissionService->isEnabled()) {
+    if (!PermissionService::isEnabled()) {
         return true; // Feature disabled, allow
     }
-    return $this->permissionService->canPerform($user, $resource, 'view');
+    return PermissionService::canPerform($user, 'view', $resource);
 }
 ```
 
@@ -117,7 +143,7 @@ public function view(User $user, Model $resource): bool
 
 1. **Add method to PermissionService:**
 ```php
-public function canDoNewThing(User $user, Model $resource): bool
+public static function canDoNewThing(User $user, $resource): bool
 {
     // Implement permission logic
 }
@@ -127,10 +153,10 @@ public function canDoNewThing(User $user, Model $resource): bool
 ```php
 public function newThing(User $user, Model $resource): bool
 {
-    if (!$this->permissionService->isEnabled()) {
+    if (!PermissionService::isEnabled()) {
         return true;
     }
-    return $this->permissionService->canDoNewThing($user, $resource);
+    return PermissionService::canDoNewThing($user, $resource);
 }
 ```
 
@@ -144,7 +170,7 @@ Gate::allows('newThing', $resource);
 ### Adding New Resource Types
 
 1. Create policy in `src/Policies/`
-2. Register in service provider's `bootPolicies()` method
+2. Register in service provider's `registerPolicies()` method
 3. Add permission checking logic to PermissionService
 4. Update documentation
 
@@ -168,7 +194,7 @@ To add a new level:
 1. Add constant: `public const NEW_LEVEL_PERMISSIONS = [...]`
 2. Add case to `getPermissionsForLevel()` match
 3. Add case to `getPermissionLevel()` match
-4. Update UI components to include new option
+4. Update AccessMatrix component to include new option
 5. Update API validation rules
 6. Update documentation
 
@@ -181,8 +207,6 @@ Follow Coolify's API conventions:
 ```php
 public function store(Request $request): JsonResponse
 {
-    $allowedFields = ['project_uuid', 'user_id', 'permission_level'];
-
     $validator = Validator::make(
         $request->all(),
         [
@@ -203,98 +227,28 @@ public function store(Request $request): JsonResponse
 }
 ```
 
-### OpenAPI Documentation
+## Installation & Deployment
 
-All API endpoints must have OpenAPI annotations:
+### Install Script (`install.sh`)
 
-```php
-/**
- * @OA\Post(
- *     path="/api/v1/permissions/project",
- *     summary="Grant project access",
- *     tags={"Permissions"},
- *     security={{"bearerAuth": {}}},
- *     @OA\RequestBody(...),
- *     @OA\Response(...)
- * )
- */
-```
+Automated installer that:
+1. Checks prerequisites (root, Docker, Docker Compose)
+2. Detects Coolify installation at `/data/coolify/source/`
+3. Supports both GHCR image pull and local build (`--local` flag)
+4. Creates `docker-compose.custom.yml` (Coolify natively supports this file)
+5. Sets `COOLIFY_GRANULAR_PERMISSIONS=true` in `.env`
+6. Restarts Coolify via `upgrade.sh`
+7. Verifies installation
 
-## Livewire Components
+### Uninstall Script (`uninstall.sh`)
 
-### Component Structure
+Automated uninstaller that:
+1. Optionally cleans database tables (prompted, or `--clean-db`/`--keep-db` flags)
+2. Removes `docker-compose.custom.yml` (with backup)
+3. Removes environment variable from `.env`
+4. Restarts Coolify via `upgrade.sh`
 
-```php
-namespace AmirhMoradi\CoolifyPermissions\Livewire\Project;
-
-use Livewire\Component;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
-
-class Access extends Component
-{
-    use AuthorizesRequests;
-
-    public function mount(): void
-    {
-        $this->authorize('update', $this->project);
-        // Load data...
-    }
-
-    public function render(): View
-    {
-        return view('coolify-permissions::livewire.project.access');
-    }
-}
-```
-
-### View Requirements
-
-- **Single root element** - Livewire requires exactly one root element
-- **Use Coolify's form components** - `<x-forms.input>`, `<x-forms.select>`, etc.
-- **Authorization in UI** - Use `canGate` and `canResource` attributes
-
-## Testing
-
-### Running Tests
-
-Tests must be run inside the Docker container:
-
-```bash
-# Enter container
-docker exec -it coolify bash
-
-# Run package tests
-./vendor/bin/pest packages/coolify-granular-permissions/tests
-```
-
-### Test Structure
-
-```
-tests/
-├── Unit/
-│   ├── PermissionServiceTest.php
-│   └── ProjectUserTest.php
-└── Feature/
-    ├── ProjectAccessTest.php
-    └── ApiPermissionsTest.php
-```
-
-### Mocking in Tests
-
-```php
-use Mockery;
-
-// Mock the permission service
-$permissionService = Mockery::mock(PermissionService::class);
-$permissionService->shouldReceive('isEnabled')->andReturn(true);
-$permissionService->shouldReceive('canPerform')->andReturn(true);
-
-$this->app->instance(PermissionService::class, $permissionService);
-```
-
-## Docker Build
-
-### Build Process
+### Docker Build
 
 The Dockerfile:
 1. Starts FROM official Coolify image
@@ -304,31 +258,14 @@ The Dockerfile:
 5. Runs composer dump-autoload
 6. Sets up s6-overlay for migrations
 
-### Migration Service
-
-The s6-overlay service (`addon-migration`) runs migrations on container startup:
-
-```bash
-#!/bin/bash
-cd /var/www/html
-php artisan migrate --force --path=vendor/amirhmoradi/coolify-granular-permissions/database/migrations
-```
-
 ## Common Tasks
 
 ### Grant user access to project
 
 ```php
-use AmirhMoradi\CoolifyPermissions\Models\ProjectUser;
+use AmirhMoradi\CoolifyPermissions\Services\PermissionService;
 
-ProjectUser::create([
-    'project_id' => $project->id,
-    'user_id' => $user->id,
-    'can_view' => true,
-    'can_deploy' => true,
-    'can_manage' => false,
-    'can_delete' => false,
-]);
+PermissionService::grantProjectAccess($user, $project, 'deploy');
 ```
 
 ### Check permission programmatically
@@ -336,9 +273,7 @@ ProjectUser::create([
 ```php
 use AmirhMoradi\CoolifyPermissions\Services\PermissionService;
 
-$service = app(PermissionService::class);
-
-if ($service->canPerform($user, $application, 'deploy')) {
+if (PermissionService::canPerform($user, 'deploy', $application)) {
     // Allow deployment
 }
 ```
@@ -346,16 +281,9 @@ if ($service->canPerform($user, $application, 'deploy')) {
 ### Override environment permissions
 
 ```php
-use AmirhMoradi\CoolifyPermissions\Models\EnvironmentUser;
+use AmirhMoradi\CoolifyPermissions\Services\PermissionService;
 
-EnvironmentUser::create([
-    'environment_id' => $environment->id,
-    'user_id' => $user->id,
-    'can_view' => true,
-    'can_deploy' => false, // Override: no deploy on this env
-    'can_manage' => false,
-    'can_delete' => false,
-]);
+PermissionService::grantEnvironmentAccess($user, $environment, 'view_only');
 ```
 
 ## Troubleshooting
@@ -371,11 +299,12 @@ EnvironmentUser::create([
 1. Check s6 service logs: `cat /var/log/s6-rc/addon-migration/current`
 2. Run manually: `php artisan migrate --path=vendor/amirhmoradi/coolify-granular-permissions/database/migrations`
 
-### Livewire components not loading
+### Access Matrix not showing
 
-1. Clear view cache: `php artisan view:clear`
-2. Check component registration in service provider
-3. Verify namespaced component name: `<livewire:coolify-permissions::project.access />`
+1. Verify user has admin/owner role (only admins/owners see the matrix)
+2. Clear view cache: `php artisan view:clear`
+3. Check container logs for middleware errors
+4. Verify you are on the `/team/admin` or `/team` page
 
 ## Version Compatibility
 
