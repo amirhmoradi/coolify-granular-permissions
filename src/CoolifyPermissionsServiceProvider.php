@@ -2,6 +2,8 @@
 
 namespace AmirhMoradi\CoolifyPermissions;
 
+use AmirhMoradi\CoolifyPermissions\Http\Middleware\InjectPermissionsUI;
+use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
@@ -29,12 +31,14 @@ class CoolifyPermissionsServiceProvider extends ServiceProvider
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'coolify-permissions');
 
-        // Load routes
-        $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+        // Load API routes only (web UI is injected via middleware)
         $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
 
-        // Register Livewire components with unique names to avoid conflicts
+        // Register Livewire components
         $this->registerLivewireComponents();
+
+        // Register middleware for UI injection into Coolify pages
+        $this->registerMiddleware();
 
         // Publish configuration
         $this->publishes([
@@ -59,14 +63,18 @@ class CoolifyPermissionsServiceProvider extends ServiceProvider
     protected function registerLivewireComponents(): void
     {
         Livewire::component(
-            'coolify-permissions::admin.users',
-            \AmirhMoradi\CoolifyPermissions\Livewire\Admin\Users::class
+            'permissions::access-matrix',
+            \AmirhMoradi\CoolifyPermissions\Livewire\AccessMatrix::class
         );
+    }
 
-        Livewire::component(
-            'coolify-permissions::project.access',
-            \AmirhMoradi\CoolifyPermissions\Livewire\Project\Access::class
-        );
+    /**
+     * Register the UI injection middleware.
+     */
+    protected function registerMiddleware(): void
+    {
+        $kernel = $this->app->make(Kernel::class);
+        $kernel->pushMiddleware(InjectPermissionsUI::class);
     }
 
     /**
