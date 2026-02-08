@@ -191,6 +191,58 @@ class PermissionService
     }
 
     /**
+     * Resolve the current project from the request route/URL.
+     *
+     * Coolify URLs follow the pattern /project/{project_uuid}/...
+     * This allows create() policy methods (which don't receive a model instance)
+     * to determine the project context.
+     */
+    public static function resolveProjectFromRequest(): ?\App\Models\Project
+    {
+        $request = request();
+
+        // Try route parameter first
+        $projectUuid = $request->route('project_uuid');
+
+        // Fallback: extract from URL path
+        if (! $projectUuid) {
+            $path = $request->path();
+            if (preg_match('#^project/([^/]+)#', $path, $matches)) {
+                $projectUuid = $matches[1];
+            }
+        }
+
+        if ($projectUuid) {
+            return \App\Models\Project::withoutGlobalScopes()
+                ->where('uuid', $projectUuid)
+                ->first();
+        }
+
+        return null;
+    }
+
+    /**
+     * Check if user can create resources in the current request context.
+     *
+     * Since create() policy methods don't receive a model instance,
+     * this resolves the project from the request and checks the manage permission.
+     */
+    public static function canCreateInCurrentContext(User $user): bool
+    {
+        if (static::hasRoleBypass($user)) {
+            return true;
+        }
+
+        $project = static::resolveProjectFromRequest();
+        if ($project) {
+            return static::hasProjectPermission($user, $project, 'manage');
+        }
+
+        // No project context - deny creation for non-bypass users
+        return false;
+    }
+
+    /**
      * Grant project access to a user.
      */
     public static function grantProjectAccess(User $user, $project, string $level = 'view_only'): ProjectUser

@@ -25,15 +25,23 @@ class ProjectPolicy
             return true;
         }
 
-        return $user->canPerform('view', $project);
+        return PermissionService::canPerform($user, 'view', $project);
     }
 
     /**
      * Determine whether the user can create projects.
+     *
+     * Project creation is a team-level operation. When granular permissions
+     * are enabled, only users with role bypass (owner/admin) can create
+     * new projects.
      */
     public function create(User $user): bool
     {
-        return true;
+        if (! PermissionService::isEnabled()) {
+            return true;
+        }
+
+        return PermissionService::hasRoleBypass($user);
     }
 
     /**
@@ -45,7 +53,7 @@ class ProjectPolicy
             return true;
         }
 
-        return $user->canPerform('update', $project);
+        return PermissionService::canPerform($user, 'update', $project);
     }
 
     /**
@@ -57,7 +65,7 @@ class ProjectPolicy
             return true;
         }
 
-        return $user->canPerform('delete', $project);
+        return PermissionService::canPerform($user, 'delete', $project);
     }
 
     /**
@@ -69,6 +77,6 @@ class ProjectPolicy
             return true;
         }
 
-        return $user->canPerform('update', $project);
+        return PermissionService::canPerform($user, 'update', $project);
     }
 }

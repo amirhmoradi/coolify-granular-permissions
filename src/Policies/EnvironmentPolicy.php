@@ -19,12 +19,21 @@ class EnvironmentPolicy
             return true;
         }
 
-        return $user->canPerform('view', $environment);
+        return PermissionService::canPerform($user, 'view', $environment);
     }
 
+    /**
+     * Determine whether the user can create environments.
+     *
+     * Requires 'manage' permission on the parent project.
+     */
     public function create(User $user): bool
     {
-        return true;
+        if (! PermissionService::isEnabled()) {
+            return true;
+        }
+
+        return PermissionService::canCreateInCurrentContext($user);
     }
 
     public function update(User $user, Environment $environment): bool
@@ -33,7 +42,7 @@ class EnvironmentPolicy
             return true;
         }
 
-        return $user->canPerform('update', $environment);
+        return PermissionService::canPerform($user, 'update', $environment);
     }
 
     public function delete(User $user, Environment $environment): bool
@@ -42,6 +51,6 @@ class EnvironmentPolicy
             return true;
         }
 
-        return $user->canPerform('delete', $environment);
+        return PermissionService::canPerform($user, 'delete', $environment);
     }
 }
