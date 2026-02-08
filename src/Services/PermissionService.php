@@ -222,10 +222,51 @@ class PermissionService
     }
 
     /**
+     * Resolve the current environment from the request route/URL.
+     *
+     * Coolify URLs follow the pattern /project/{project_uuid}/{environment_name}/...
+     * This allows permission checks in contexts where no model instance is available.
+     */
+    public static function resolveEnvironmentFromRequest(): ?\App\Models\Environment
+    {
+        $project = static::resolveProjectFromRequest();
+        if (! $project) {
+            return null;
+        }
+
+        $request = request();
+
+        // Try route parameter first
+        $envName = $request->route('environment_name');
+
+        // Fallback: extract from URL path
+        if (! $envName) {
+            $path = $request->path();
+            // /project/{uuid}/{env_name}/...
+            if (preg_match('#^project/[^/]+/([^/]+)#', $path, $matches)) {
+                $envName = $matches[1];
+            }
+        }
+
+        if ($envName) {
+            return \App\Models\Environment::withoutGlobalScopes()
+                ->where('project_id', $project->id)
+                ->where('name', $envName)
+                ->first();
+        }
+
+        return null;
+    }
+
+    /**
      * Check if user can create resources in the current request context.
      *
      * Since create() policy methods don't receive a model instance,
-     * this resolves the project from the request and checks the manage permission.
+     * this resolves the project and environment from the request URL
+     * and checks the manage permission at the most specific level available.
+     *
+     * Environment-level overrides take precedence over project-level,
+     * matching the same cascade logic used by hasEnvironmentPermission().
      */
     public static function canCreateInCurrentContext(User $user): bool
     {
@@ -233,6 +274,13 @@ class PermissionService
             return true;
         }
 
+        // Try environment-level first (most specific)
+        $environment = static::resolveEnvironmentFromRequest();
+        if ($environment) {
+            return static::hasEnvironmentPermission($user, $environment, 'manage');
+        }
+
+        // Fall back to project-level
         $project = static::resolveProjectFromRequest();
         if ($project) {
             return static::hasProjectPermission($user, $project, 'manage');
@@ -240,6 +288,22 @@ class PermissionService
 
         // No project context - deny creation for non-bypass users
         return false;
+    }
+
+    /**
+     * Check permission for a resource that has a polymorphic parent
+     * (e.g., EnvironmentVariable → Application/Service via resourceable).
+     *
+     * Traverses the parent chain: resource → environment → permission check.
+     */
+    public static function checkResourceablePermission(User $user, $resourceable, string $permission): bool
+    {
+        if (! $resourceable) {
+            return static::hasRoleBypass($user);
+        }
+
+        // The resourceable is the parent Application/Service/Database
+        return static::canPerform($user, $permission, $resourceable);
     }
 
     /**

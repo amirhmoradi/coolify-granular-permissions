@@ -100,20 +100,32 @@ class CoolifyPermissionsServiceProvider extends ServiceProvider
 
     /**
      * Override Coolify's default policies with permission-aware versions.
+     *
+     * Coolify's own policies (as of v4) return true for all operations.
+     * We override them to enforce granular project/environment permissions.
      */
     protected function registerPolicies(): void
     {
         $policies = [
+            // Core resource policies
             \App\Models\Application::class => \AmirhMoradi\CoolifyPermissions\Policies\ApplicationPolicy::class,
             \App\Models\Project::class => \AmirhMoradi\CoolifyPermissions\Policies\ProjectPolicy::class,
             \App\Models\Environment::class => \AmirhMoradi\CoolifyPermissions\Policies\EnvironmentPolicy::class,
             \App\Models\Server::class => \AmirhMoradi\CoolifyPermissions\Policies\ServerPolicy::class,
             \App\Models\Service::class => \AmirhMoradi\CoolifyPermissions\Policies\ServicePolicy::class,
+
+            // Database policies (all types)
             \App\Models\StandalonePostgresql::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
             \App\Models\StandaloneMysql::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
             \App\Models\StandaloneMariadb::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
             \App\Models\StandaloneMongodb::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
             \App\Models\StandaloneRedis::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
+            \App\Models\StandaloneKeydb::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
+            \App\Models\StandaloneDragonfly::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
+            \App\Models\StandaloneClickhouse::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
+
+            // Sub-resource policies (Coolify's defaults return true for everything)
+            \App\Models\EnvironmentVariable::class => \AmirhMoradi\CoolifyPermissions\Policies\EnvironmentVariablePolicy::class,
         ];
 
         foreach ($policies as $model => $policy) {
