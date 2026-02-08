@@ -156,6 +156,7 @@ class EnvironmentUser extends Pivot
         return match ($level) {
             'full_access' => self::FULL_ACCESS_PERMISSIONS,
             'deploy' => self::DEPLOY_PERMISSIONS,
+            'none' => self::DEFAULT_PERMISSIONS,
             default => self::VIEW_ONLY_PERMISSIONS,
         };
     }
