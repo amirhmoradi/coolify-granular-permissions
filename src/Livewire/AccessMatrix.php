@@ -155,6 +155,7 @@ class AccessMatrix extends Component
      * Update an environment-level permission override for a user.
      *
      * "inherited" removes the override so the project level cascades down.
+     * "none" sets an explicit override with all permissions false (hides environment).
      * Any other level sets an explicit environment override.
      */
     public function updateEnvironmentPermission(int $userId, int $envId, string $level): void
@@ -168,6 +169,7 @@ class AccessMatrix extends Component
             // Remove the override — permission will cascade from project
             PermissionService::revokeEnvironmentAccess($user, $environment);
         } else {
+            // "none" stores an explicit override with all permissions false
             PermissionService::grantEnvironmentAccess($user, $environment, $level);
         }
 
@@ -259,6 +261,7 @@ class AccessMatrix extends Component
             if ($level === 'inherited') {
                 PermissionService::revokeEnvironmentAccess($userModel, $environment);
             } else {
+                // "none" stores explicit override with all permissions false
                 PermissionService::grantEnvironmentAccess($userModel, $environment, $level);
             }
         }
