@@ -8,6 +8,11 @@
 
 > **Note**: This addon is designed for Coolify v4. Coolify v5 is expected to include similar functionality natively. When v5 is released with built-in granular permissions, we will provide a migration guide.
 
+## TL;DR - Show me:
+<img width="2378" height="1964" alt="coolify-granular-permissions-screenshot" src="https://github.com/user-attachments/assets/0fd6b8ee-d9a8-4154-b09e-a6dbe2d4e46a" />
+
+
+
 ## Overview
 
 This Laravel package extends Coolify with fine-grained access control:
