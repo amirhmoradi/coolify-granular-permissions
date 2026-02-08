@@ -13,14 +13,14 @@ class ServerPolicy
         return true;
     }
 
+    /**
+     * Viewing server details is allowed for any team member.
+     * Servers are team-level resources but view-only users may need to see
+     * server status on project pages.
+     */
     public function view(User $user, Server $server): bool
     {
-        if (! PermissionService::isEnabled()) {
-            return true;
-        }
-
-        // Servers are team-level resources, check role bypass
-        return PermissionService::hasRoleBypass($user);
+        return true;
     }
 
     public function create(User $user): bool

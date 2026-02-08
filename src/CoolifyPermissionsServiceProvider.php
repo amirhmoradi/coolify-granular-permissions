@@ -5,6 +5,7 @@ namespace AmirhMoradi\CoolifyPermissions;
 use AmirhMoradi\CoolifyPermissions\Http\Middleware\InjectPermissionsUI;
 use AmirhMoradi\CoolifyPermissions\Scopes\EnvironmentPermissionScope;
 use AmirhMoradi\CoolifyPermissions\Scopes\ProjectPermissionScope;
+use AmirhMoradi\CoolifyPermissions\Services\PermissionService;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -57,6 +58,9 @@ class CoolifyPermissionsServiceProvider extends ServiceProvider
 
         // Override policies with permission-aware versions
         $this->registerPolicies();
+
+        // Extend User model with permission-checking macros
+        $this->registerUserMacros();
     }
 
     /**
@@ -116,6 +120,29 @@ class CoolifyPermissionsServiceProvider extends ServiceProvider
             if (class_exists($model)) {
                 Gate::policy($model, $policy);
             }
+        }
+    }
+
+    /**
+     * Register permission-checking macros on the User model.
+     *
+     * Adds canPerform() to Coolify's User model so policies and Blade
+     * templates can call $user->canPerform($action, $resource).
+     */
+    protected function registerUserMacros(): void
+    {
+        if (! class_exists(\App\Models\User::class)) {
+            return;
+        }
+
+        // Only add macro if the User model supports it (uses Macroable trait)
+        // and the method doesn't already exist
+        $userClass = \App\Models\User::class;
+
+        if (method_exists($userClass, 'macro') && ! method_exists($userClass, 'canPerform')) {
+            $userClass::macro('canPerform', function (string $action, $resource): bool {
+                return PermissionService::canPerform($this, $action, $resource);
+            });
         }
     }
 }

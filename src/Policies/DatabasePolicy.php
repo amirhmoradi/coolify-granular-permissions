@@ -23,12 +23,21 @@ class DatabasePolicy
             return true;
         }
 
-        return $user->canPerform('view', $database);
+        return PermissionService::canPerform($user, 'view', $database);
     }
 
+    /**
+     * Determine whether the user can create databases.
+     *
+     * Requires 'manage' permission on the current project context.
+     */
     public function create(User $user): bool
     {
-        return true;
+        if (! PermissionService::isEnabled()) {
+            return true;
+        }
+
+        return PermissionService::canCreateInCurrentContext($user);
     }
 
     public function update(User $user, $database): bool
@@ -37,7 +46,7 @@ class DatabasePolicy
             return true;
         }
 
-        return $user->canPerform('update', $database);
+        return PermissionService::canPerform($user, 'update', $database);
     }
 
     public function delete(User $user, $database): bool
@@ -46,7 +55,7 @@ class DatabasePolicy
             return true;
         }
 
-        return $user->canPerform('delete', $database);
+        return PermissionService::canPerform($user, 'delete', $database);
     }
 
     public function deploy(User $user, $database): bool
@@ -55,6 +64,21 @@ class DatabasePolicy
             return true;
         }
 
-        return $user->canPerform('deploy', $database);
+        return PermissionService::canPerform($user, 'deploy', $database);
+    }
+
+    /**
+     * Determine whether the user can manage environment variables and settings.
+     *
+     * Coolify's Blade templates use @can('manageEnvironment', $resource) to gate
+     * environment variable management, settings checkboxes, and developer views.
+     */
+    public function manageEnvironment(User $user, $database): bool
+    {
+        if (! PermissionService::isEnabled()) {
+            return true;
+        }
+
+        return PermissionService::canPerform($user, 'manage', $database);
     }
 }

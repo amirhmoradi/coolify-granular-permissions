@@ -25,15 +25,22 @@ class ApplicationPolicy
             return true;
         }
 
-        return $user->canPerform('view', $application);
+        return PermissionService::canPerform($user, 'view', $application);
     }
 
     /**
      * Determine whether the user can create applications.
+     *
+     * Requires 'manage' permission on the current project context.
+     * Mirrors Coolify's PrivateKeyPolicy pattern where create() checks isAdmin().
      */
     public function create(User $user): bool
     {
-        return true;
+        if (! PermissionService::isEnabled()) {
+            return true;
+        }
+
+        return PermissionService::canCreateInCurrentContext($user);
     }
 
     /**
@@ -45,7 +52,7 @@ class ApplicationPolicy
             return true;
         }
 
-        return $user->canPerform('update', $application);
+        return PermissionService::canPerform($user, 'update', $application);
     }
 
     /**
@@ -57,7 +64,7 @@ class ApplicationPolicy
             return true;
         }
 
-        return $user->canPerform('delete', $application);
+        return PermissionService::canPerform($user, 'delete', $application);
     }
 
     /**
@@ -69,6 +76,21 @@ class ApplicationPolicy
             return true;
         }
 
-        return $user->canPerform('deploy', $application);
+        return PermissionService::canPerform($user, 'deploy', $application);
+    }
+
+    /**
+     * Determine whether the user can manage environment variables and settings.
+     *
+     * Coolify's Blade templates use @can('manageEnvironment', $resource) to gate
+     * environment variable management, settings checkboxes, and developer views.
+     */
+    public function manageEnvironment(User $user, Application $application): bool
+    {
+        if (! PermissionService::isEnabled()) {
+            return true;
+        }
+
+        return PermissionService::canPerform($user, 'manage', $application);
     }
 }
