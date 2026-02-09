@@ -334,7 +334,7 @@
     {{-- Scoped styles for permission select dropdowns --}}
     <style data-navigate-once>
         /* --- Permission matrix select dropdowns --- */
-        #granular-permissions-inject .perm-select {
+        #coolify-enhanced-inject .perm-select {
             display: block;
             width: 100%;
             padding: 0.25rem 1.5rem 0.25rem 0.5rem;
@@ -351,78 +351,78 @@
             background-size: 1.25em 1.25em;
             transition: border-color 0.15s, box-shadow 0.15s;
         }
-        #granular-permissions-inject .perm-select:focus {
+        #coolify-enhanced-inject .perm-select:focus {
             outline: none;
             box-shadow: 0 0 0 2px rgba(107, 22, 237, 0.3);
         }
-        .dark #granular-permissions-inject .perm-select:focus {
+        .dark #coolify-enhanced-inject .perm-select:focus {
             box-shadow: 0 0 0 2px rgba(252, 212, 82, 0.3);
         }
 
         /* Dirty (unsaved) indicator — left accent bar */
-        #granular-permissions-inject .perm-select-dirty {
+        #coolify-enhanced-inject .perm-select-dirty {
             box-shadow: inset 4px 0 0 #6b16ed;
         }
-        .dark #granular-permissions-inject .perm-select-dirty {
+        .dark #coolify-enhanced-inject .perm-select-dirty {
             box-shadow: inset 4px 0 0 #fcd452;
         }
 
         /* Full Access - Green */
-        #granular-permissions-inject .perm-select-full {
+        #coolify-enhanced-inject .perm-select-full {
             background-color: #dcfce7;
             border-color: #4ade80;
             color: #166534;
         }
-        .dark #granular-permissions-inject .perm-select-full {
+        .dark #coolify-enhanced-inject .perm-select-full {
             background-color: rgba(22, 101, 52, 0.35);
             border-color: #22c55e;
             color: #86efac;
         }
 
         /* Deploy - Amber */
-        #granular-permissions-inject .perm-select-deploy {
+        #coolify-enhanced-inject .perm-select-deploy {
             background-color: #fef3c7;
             border-color: #fbbf24;
             color: #92400e;
         }
-        .dark #granular-permissions-inject .perm-select-deploy {
+        .dark #coolify-enhanced-inject .perm-select-deploy {
             background-color: rgba(146, 64, 14, 0.35);
             border-color: #f59e0b;
             color: #fcd34d;
         }
 
         /* View Only - Blue */
-        #granular-permissions-inject .perm-select-view {
+        #coolify-enhanced-inject .perm-select-view {
             background-color: #dbeafe;
             border-color: #60a5fa;
             color: #1e40af;
         }
-        .dark #granular-permissions-inject .perm-select-view {
+        .dark #coolify-enhanced-inject .perm-select-view {
             background-color: rgba(30, 64, 175, 0.35);
             border-color: #3b82f6;
             color: #93c5fd;
         }
 
         /* No Access - Neutral */
-        #granular-permissions-inject .perm-select-none {
+        #coolify-enhanced-inject .perm-select-none {
             background-color: #f5f5f5;
             border-color: #d4d4d4;
             color: #737373;
         }
-        .dark #granular-permissions-inject .perm-select-none {
+        .dark #coolify-enhanced-inject .perm-select-none {
             background-color: rgba(64, 64, 64, 0.3);
             border-color: #525252;
             color: #a3a3a3;
         }
 
         /* Inherited - Purple/Dashed */
-        #granular-permissions-inject .perm-select-inherited {
+        #coolify-enhanced-inject .perm-select-inherited {
             background-color: #f5f3ff;
             border-color: #c4b5fd;
             color: #6d28d9;
             border-style: dashed;
         }
-        .dark #granular-permissions-inject .perm-select-inherited {
+        .dark #coolify-enhanced-inject .perm-select-inherited {
             background-color: rgba(109, 40, 217, 0.15);
             border-color: #7c3aed;
             color: #c4b5fd;

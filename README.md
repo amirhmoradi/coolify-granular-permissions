@@ -1,7 +1,7 @@
 # Coolify Enhanced
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build and Publish Docker Image](https://github.com/amirhmoradi/coolify-granular-permissions/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/amirhmoradi/coolify-granular-permissions/actions/workflows/docker-publish.yml)
+[![Build and Publish Docker Image](https://github.com/amirhmoradi/coolify-enhanced/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/amirhmoradi/coolify-enhanced/actions/workflows/docker-publish.yml)
 [![Docker Image](https://img.shields.io/badge/ghcr.io-coolify--enhanced-blue)](https://ghcr.io/amirhmoradi/coolify-enhanced)
 
 **Granular permissions and encrypted S3 backups for Coolify v4**
@@ -31,7 +31,7 @@
 - **Docker deployed**: Custom image extending official Coolify
 
 ## TL;DR - Show me:
-<img width="2378" height="1964" alt="coolify-granular-permissions-screenshot" src="https://github.com/user-attachments/assets/0fd6b8ee-d9a8-4154-b09e-a6dbe2d4e46a" />
+<img width="2378" height="1964" alt="coolify-enhanced-screenshot" src="https://github.com/user-attachments/assets/0fd6b8ee-d9a8-4154-b09e-a6dbe2d4e46a" />
 
 ## Requirements
 
@@ -44,8 +44,8 @@
 ### Quick Install (Recommended)
 
 ```bash
-git clone https://github.com/amirhmoradi/coolify-granular-permissions.git
-cd coolify-granular-permissions
+git clone https://github.com/amirhmoradi/coolify-enhanced.git
+cd coolify-enhanced
 sudo bash install.sh
 ```
 
@@ -95,8 +95,8 @@ bash upgrade.sh
 ### Build Locally
 
 ```bash
-git clone https://github.com/amirhmoradi/coolify-granular-permissions.git
-cd coolify-granular-permissions
+git clone https://github.com/amirhmoradi/coolify-enhanced.git
+cd coolify-enhanced
 sudo bash install.sh --local
 ```
 
@@ -351,7 +351,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Support
 
-- [GitHub Issues](https://github.com/amirhmoradi/coolify-granular-permissions/issues)
+- [GitHub Issues](https://github.com/amirhmoradi/coolify-enhanced/issues)
 - [Coolify Discord](https://discord.gg/coolify)
 
 ## Acknowledgments
