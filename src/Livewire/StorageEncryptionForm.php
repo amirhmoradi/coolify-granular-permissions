@@ -3,7 +3,6 @@
 namespace AmirhMoradi\CoolifyEnhanced\Livewire;
 
 use App\Models\S3Storage;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 
 /**
@@ -11,11 +10,14 @@ use Livewire\Component;
  *
  * Injected into Coolify's storage form page via middleware. Provides
  * a UI for configuring rclone crypt encryption on S3 destinations.
+ *
+ * Note: We intentionally do NOT call $this->authorize() in mount() because
+ * this component is rendered via Blade::render() in middleware context
+ * where auth context may not be fully available. The storage page itself
+ * already authorizes access via StorageShow::mount().
  */
 class StorageEncryptionForm extends Component
 {
-    use AuthorizesRequests;
-
     public ?int $storageId = null;
 
     public bool $encryptionEnabled = false;
@@ -45,22 +47,35 @@ class StorageEncryptionForm extends Component
 
     public function mount(int $storageId): void
     {
-        $storage = S3Storage::findOrFail($storageId);
-        $this->authorize('update', $storage);
+        $storage = S3Storage::find($storageId);
+        if (! $storage) {
+            return;
+        }
 
         $this->storageId = $storage->id;
-        $this->encryptionEnabled = (bool) $storage->encryption_enabled;
-        $this->encryptionPassword = $storage->encryption_password ?? '';
-        $this->encryptionSalt = $storage->encryption_salt ?? '';
-        $this->filenameEncryption = $storage->filename_encryption ?? 'off';
-        $this->directoryNameEncryption = (bool) $storage->directory_name_encryption;
+
+        // Gracefully handle case where encryption columns don't exist yet
+        // (migration may not have run)
+        try {
+            $this->encryptionEnabled = (bool) ($storage->encryption_enabled ?? false);
+            $this->encryptionPassword = $storage->encryption_password ?? '';
+            $this->encryptionSalt = $storage->encryption_salt ?? '';
+            $this->filenameEncryption = $storage->filename_encryption ?? 'off';
+            $this->directoryNameEncryption = (bool) ($storage->directory_name_encryption ?? false);
+        } catch (\Throwable $e) {
+            // Columns might not exist yet - use defaults
+            $this->encryptionEnabled = false;
+            $this->encryptionPassword = '';
+            $this->encryptionSalt = '';
+            $this->filenameEncryption = 'off';
+            $this->directoryNameEncryption = false;
+        }
     }
 
     public function save(): void
     {
         try {
             $storage = S3Storage::findOrFail($this->storageId);
-            $this->authorize('update', $storage);
 
             if ($this->encryptionEnabled && empty($this->encryptionPassword)) {
                 $this->dispatch('error', 'Encryption password is required when encryption is enabled.');

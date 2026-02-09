@@ -6,6 +6,7 @@ use AmirhMoradi\CoolifyEnhanced\Services\PermissionService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 class InjectPermissionsUI
@@ -25,14 +26,14 @@ class InjectPermissionsUI
         }
 
         $content = $response->getContent();
-        if ($content === false) {
+        if ($content === false || empty($content)) {
             return $response;
         }
 
         $injections = '';
 
         // Inject access matrix on team admin page
-        if ($request->routeIs('team.admin-view') && PermissionService::hasRoleBypass(auth()->user())) {
+        if ($this->isTeamAdminPage($request) && PermissionService::hasRoleBypass(auth()->user())) {
             $component = $this->renderAccessMatrix();
             if (! empty($component)) {
                 $injections .= $this->wrapWithInjector($component);
@@ -40,11 +41,13 @@ class InjectPermissionsUI
         }
 
         // Inject encryption form on storage detail page
-        if ($request->routeIs('storage.show')) {
-            $storageUuid = $request->route('storage_uuid');
-            $encryptionForm = $this->renderEncryptionForm($storageUuid);
-            if (! empty($encryptionForm)) {
-                $injections .= $this->wrapWithStorageInjector($encryptionForm);
+        if ($this->isStorageDetailPage($request)) {
+            $storageUuid = $this->extractStorageUuid($request);
+            if ($storageUuid) {
+                $encryptionForm = $this->renderEncryptionForm($storageUuid);
+                if (! empty($encryptionForm)) {
+                    $injections .= $this->wrapWithStorageInjector($encryptionForm);
+                }
             }
         }
 
@@ -67,6 +70,57 @@ class InjectPermissionsUI
     }
 
     /**
+     * Check if this is the team admin page.
+     */
+    protected function isTeamAdminPage(Request $request): bool
+    {
+        // Try named route first, fall back to URL pattern
+        if ($request->routeIs('team.admin-view')) {
+            return true;
+        }
+
+        return $request->is('team/admin') || $request->is('team');
+    }
+
+    /**
+     * Check if this is a storage detail page.
+     * Uses both named route and URL pattern matching for reliability
+     * with Livewire SPA navigation.
+     */
+    protected function isStorageDetailPage(Request $request): bool
+    {
+        // Try named route first
+        if ($request->routeIs('storage.show')) {
+            return true;
+        }
+
+        // Fallback: match URL pattern /storages/{uuid}
+        $path = trim($request->path(), '/');
+
+        return (bool) preg_match('#^storages/[a-zA-Z0-9-]+$#', $path);
+    }
+
+    /**
+     * Extract the storage UUID from the request.
+     */
+    protected function extractStorageUuid(Request $request): ?string
+    {
+        // Try route parameter first
+        $uuid = $request->route('storage_uuid');
+        if ($uuid) {
+            return $uuid;
+        }
+
+        // Fallback: extract from URL path
+        $path = trim($request->path(), '/');
+        if (preg_match('#^storages/([a-zA-Z0-9-]+)$#', $path, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+
+    /**
      * Render the Livewire access matrix component.
      */
     protected function renderAccessMatrix(): string
@@ -74,7 +128,9 @@ class InjectPermissionsUI
         try {
             return Blade::render('@livewire(\'enhanced::access-matrix\')');
         } catch (\Throwable $e) {
-            report($e);
+            Log::error('Coolify Enhanced: Failed to render access matrix', [
+                'error' => $e->getMessage(),
+            ]);
 
             return '';
         }
@@ -92,6 +148,8 @@ class InjectPermissionsUI
         try {
             $storage = \App\Models\S3Storage::where('uuid', $storageUuid)->first();
             if (! $storage) {
+                Log::debug('Coolify Enhanced: S3Storage not found for UUID: '.$storageUuid);
+
                 return '';
             }
 
@@ -99,7 +157,11 @@ class InjectPermissionsUI
                 '@livewire(\'enhanced::storage-encryption-form\', [\'storageId\' => '.$storage->id.'])'
             );
         } catch (\Throwable $e) {
-            report($e);
+            Log::error('Coolify Enhanced: Failed to render encryption form', [
+                'uuid' => $storageUuid,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
 
             return '';
         }
@@ -107,26 +169,13 @@ class InjectPermissionsUI
 
     /**
      * Wrap the rendered component with a container and positioning script.
-     *
-     * Coolify's layout structure:
-     *   <main class="lg:pl-56">
-     *     <div class="p-4 sm:px-6 lg:px-8 lg:py-6">
-     *       <div> <!-- Livewire component root (admin-view) -->
-     *         <x-team.navbar />
-     *         <h2>Admin View</h2>
-     *         ...content...
-     *       </div>
-     *     </div>
-     *   </main>
-     *
-     * We append our section inside the Livewire component root div.
      */
     protected function wrapWithInjector(string $componentHtml): string
     {
         return <<<HTML
 
-<!-- Coolify Granular Permissions - Injected Access Matrix -->
-<div id="granular-permissions-inject" style="display:none;">
+<!-- Coolify Enhanced - Injected Access Matrix -->
+<div id="coolify-enhanced-inject" style="display:none;">
     {$componentHtml}
 </div>
 <script data-navigate-once>
@@ -136,7 +185,7 @@ class InjectPermissionsUI
     }
 
     function positionPermissionsUI() {
-        var wrapper = document.getElementById('granular-permissions-inject');
+        var wrapper = document.getElementById('coolify-enhanced-inject');
         if (!wrapper) return;
 
         // Only show on team admin page — hide on all other pages
@@ -185,7 +234,7 @@ class InjectPermissionsUI
 
     // Re-run after Livewire SPA navigation (wire:navigate)
     document.addEventListener('livewire:navigated', function() {
-        var wrapper = document.getElementById('granular-permissions-inject');
+        var wrapper = document.getElementById('coolify-enhanced-inject');
         if (wrapper) wrapper.dataset.positioned = '';
         setTimeout(positionPermissionsUI, 50);
     });
@@ -199,26 +248,22 @@ HTML;
     /**
      * Wrap the encryption form with a container and positioning script.
      *
-     * Coolify's storage form page structure:
-     *   <form class="flex flex-col gap-2 pb-6" wire:submit='submit'>
-     *     ... storage fields ...
-     *     <button>Validate Connection</button>
-     *   </form>
-     *
-     * We inject our encryption form after the storage form.
+     * Coolify's storage form page renders <livewire:storage.form> which produces
+     * a form with wire:submit. We inject our encryption section after it.
      */
     protected function wrapWithStorageInjector(string $componentHtml): string
     {
-        return <<<HTML
+        return <<<'SCRIPT_START'
 
 <!-- Coolify Enhanced - Encryption Settings -->
 <div id="enhanced-encryption-inject" style="display:none;">
-    {$componentHtml}
+SCRIPT_START
+            .$componentHtml.<<<'HTML'
 </div>
 <script data-navigate-once>
 (function() {
     function isStoragePage() {
-        return window.location.pathname.startsWith('/storages/');
+        return /^\/storages\/[a-zA-Z0-9-]+\/?$/.test(window.location.pathname);
     }
 
     function positionEncryptionUI() {
@@ -233,26 +278,33 @@ HTML;
 
         if (wrapper.dataset.positioned === 'true') return;
 
-        // Target: the storage form's parent div
-        var storageForm = document.querySelector('form[wire\\\\:submit\\.prevent="submit"], form[wire\\\\:submit="submit"]');
+        // Strategy 1: Find the storage form by wire:submit attribute
+        var storageForm = document.querySelector('form[wire\\:submit="submit"]')
+            || document.querySelector('form[wire\\:submit\\.prevent="submit"]');
         var target = storageForm ? storageForm.parentElement : null;
 
-        // Fallback: find "Storage Details" heading
+        // Strategy 2: Find "Storage Details" heading
         if (!target) {
-            var headings = document.querySelectorAll('h1');
-            for (var i = 0; i < headings.length; i++) {
-                if (headings[i].textContent.trim() === 'Storage Details') {
-                    target = headings[i].closest('div');
+            var allHeadings = document.querySelectorAll('h1, h2, h3');
+            for (var i = 0; i < allHeadings.length; i++) {
+                var text = allHeadings[i].textContent.trim();
+                if (text === 'Storage Details' || text.indexOf('Storage') !== -1) {
+                    target = allHeadings[i].closest('div');
                     break;
                 }
             }
         }
 
+        // Strategy 3: Find the main Livewire component wrapper
         if (!target) {
-            target = document.querySelector('main > div > div');
+            var mainContent = document.querySelector('main');
+            if (mainContent) {
+                // Find the deepest content div
+                target = mainContent.querySelector('div > div') || mainContent;
+            }
         }
 
-        if (target && target !== wrapper) {
+        if (target && target !== wrapper && !target.contains(wrapper)) {
             target.appendChild(wrapper);
             wrapper.dataset.positioned = 'true';
         }
@@ -269,7 +321,7 @@ HTML;
     document.addEventListener('livewire:navigated', function() {
         var wrapper = document.getElementById('enhanced-encryption-inject');
         if (wrapper) wrapper.dataset.positioned = '';
-        setTimeout(positionEncryptionUI, 50);
+        setTimeout(positionEncryptionUI, 100);
     });
 })();
 </script>

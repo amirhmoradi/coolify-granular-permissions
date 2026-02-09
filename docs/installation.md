@@ -15,8 +15,8 @@ The fastest way to get started is using the setup script, which works on both fr
 ### Interactive Setup
 
 ```bash
-git clone https://github.com/amirhmoradi/coolify-granular-permissions.git
-cd coolify-granular-permissions
+git clone https://github.com/amirhmoradi/coolify-enhanced.git
+cd coolify-enhanced
 sudo bash install.sh
 ```
 
@@ -131,8 +131,8 @@ Best for: Custom modifications, air-gapped environments
 
 1. Clone the package repository:
    ```bash
-   git clone https://github.com/amirhmoradi/coolify-granular-permissions.git
-   cd coolify-granular-permissions
+   git clone https://github.com/amirhmoradi/coolify-enhanced.git
+   cd coolify-enhanced
    ```
 
 2. Build the image:
@@ -283,7 +283,7 @@ bash upgrade.sh
 ### Self-built Image
 
 ```bash
-cd coolify-granular-permissions
+cd coolify-enhanced
 git pull
 docker build \
   --build-arg COOLIFY_VERSION=latest \
@@ -519,8 +519,8 @@ If you revert and later decide to use the enhanced features again:
 
 ## Support
 
-- **Issues:** https://github.com/amirhmoradi/coolify-granular-permissions/issues
-- **Discussions:** https://github.com/amirhmoradi/coolify-granular-permissions/discussions
+- **Issues:** https://github.com/amirhmoradi/coolify-enhanced/issues
+- **Discussions:** https://github.com/amirhmoradi/coolify-enhanced/discussions
 
 ---
 
