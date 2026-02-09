@@ -2,6 +2,13 @@
 
 Detailed instructions for AI assistants working with the Coolify Granular Permissions package.
 
+## Mandatory Rules
+
+1. **Keep docs updated** - After every significant code change, update CLAUDE.md and AGENTS.md with new learnings, patterns, and pitfalls.
+2. **Pull Coolify source** - At the start of each session, run `git -C docs/coolify-source pull` to update the Coolify reference source. If missing, clone it: `git clone --depth 1 https://github.com/coollabsio/coolify.git docs/coolify-source`.
+3. **Reference Coolify source** - When working on policies, authorization, or UI integration, browse `docs/coolify-source/` to understand Coolify's native implementation.
+4. **Read before writing** - Always read existing files before modifying them.
+
 ## Package Context
 
 This is a **Laravel package** that extends Coolify v4 with granular user role and project-level access management. It does NOT modify Coolify directly but extends it via Laravel's service provider and policy override system.
@@ -13,6 +20,65 @@ This is a **Laravel package** that extends Coolify v4 with granular user role an
 3. **Backward compatible** - When disabled, Coolify behaves normally
 4. **Docker-deployed** - Installed via custom Docker image extending official Coolify
 5. **UI injection** - Access Matrix is injected into Coolify's `/team/admin` page via middleware
+
+## Critical Architecture Knowledge
+
+### Service Provider Boot Order (CRITICAL)
+
+Laravel boots **package providers BEFORE application providers**. This means:
+
+1. Our `CoolifyPermissionsServiceProvider::boot()` runs FIRST
+2. Coolify's `AuthServiceProvider::boot()` runs AFTER us
+3. Coolify's `$policies` property calls `Gate::policy()` internally, **overwriting** our policies
+
+**Solution:** Defer policy registration using `$this->app->booted()`:
+
+```php
+// In CoolifyPermissionsServiceProvider::boot()
+$this->app->booted(function () {
+    $this->registerPolicies();    // Runs AFTER Coolify's AuthServiceProvider
+    $this->registerUserMacros();
+});
+```
+
+**Never** register policies directly in `boot()`. Always use `$this->app->booted()`.
+
+### Coolify's Authorization Mechanisms
+
+Coolify uses three ways to check authorization. Our policies must support all of them:
+
+1. **Blade component attributes**: `canGate="update" :canResource="$application"`
+   - Internally calls `Gate::allows('update', $application)`
+   - Requires our policy to have an `update()` method
+
+2. **Blade `@can` directives**: `@can('manageEnvironment', $resource)`
+   - Used to gate environment variable management UI
+   - Requires our policy to have a `manageEnvironment()` method
+
+3. **Livewire `$this->authorize()`**: `$this->authorize('update', $resource)`
+   - Server-side checks in Livewire component methods
+   - Same policy methods as Gate::allows()
+
+Reference: `docs/coolify-source/app/Providers/AuthServiceProvider.php` for full policy list.
+
+### Coolify's Native Policies
+
+Coolify's own policies (v4) return `true` for ALL operations — authorization is effectively disabled. There is no `Gate::before()` callback. Our package overrides these policies with permission-aware versions.
+
+### Permission Resolution Flow
+
+```
+1. Check role bypass (owner/admin → return true immediately)
+2. Check environment-level override (environment_user table)
+   - If record exists → use its permissions
+   - If no record → fall through to project level
+3. Check project-level permission (project_user table)
+   - If record exists → use its permissions
+   - If no record → deny
+4. Deny (no access)
+```
+
+**Key insight:** Environment-level overrides are checked FIRST and take precedence. When no environment override exists, the project-level permission cascades down.
 
 ## Architecture
 
@@ -30,9 +96,9 @@ Environment Override → Optional overrides in environment_user table (inherits 
 
 | Level | View | Deploy | Manage | Delete |
 |-------|------|--------|--------|--------|
-| `view_only` | ✓ | ✗ | ✗ | ✗ |
-| `deploy` | ✓ | ✓ | ✗ | ✗ |
-| `full_access` | ✓ | ✓ | ✓ | ✓ |
+| `view_only` | yes | no | no | no |
+| `deploy` | yes | yes | no | no |
+| `full_access` | yes | yes | yes | yes |
 
 ### Role Bypass Rules
 
@@ -40,6 +106,15 @@ Environment Override → Optional overrides in environment_user table (inherits 
 - **Admin**: Full access to everything (bypasses all permission checks)
 - **Member**: Requires explicit project access when feature is enabled
 - **Viewer**: Read-only access when feature is enabled, requires project access
+
+### Coolify URL Patterns
+
+These patterns are used by `resolveProjectFromRequest()` and `resolveEnvironmentFromRequest()`:
+
+- Project page: `/project/{uuid}`
+- Environment: `/project/{uuid}/{env_name}`
+- New resource: `/project/{uuid}/{env_name}/new`
+- Application: `/project/{uuid}/{env_name}/application/{app_uuid}`
 
 ## Code Organization
 
@@ -50,15 +125,17 @@ The main entry point that:
 - Loads API routes (web routes removed in favor of middleware injection)
 - Registers the `AccessMatrix` Livewire component
 - Registers `InjectPermissionsUI` middleware for UI injection
-- Overrides Coolify's default policies with permission-aware versions
-- Extends User model with permission-checking macros
+- Registers Eloquent global scopes for filtering projects/environments
+- **Defers** policy registration and User macros to `$this->app->booted()` callback
 
 **Key methods:**
 - `register()` - Merges config
-- `boot()` - Loads all package resources, registers policies
+- `boot()` - Loads all package resources, sets up booted callback
 - `registerLivewireComponents()` - Registers `permissions::access-matrix` component
 - `registerMiddleware()` - Pushes `InjectPermissionsUI` as global middleware
-- `registerPolicies()` - Overrides Gate policies for all resource types
+- `registerScopes()` - Adds ProjectPermissionScope and EnvironmentPermissionScope
+- `registerPolicies()` - Overrides Gate policies for all resource types (called via booted callback)
+- `registerUserMacros()` - Adds `canPerform()` macro to User model (called via booted callback)
 
 ### Permission Service (`Services/PermissionService.php`)
 
@@ -76,10 +153,22 @@ hasProjectPermission(User $user, Project $project, string $permission): bool
 hasEnvironmentPermission(User $user, Environment $environment, string $permission): bool
 
 // Main entry point for all permission checks
-canPerform(User $user, $resource, string $permission): bool
+canPerform(User $user, string $action, $resource): bool
 
 // Check if user has owner/admin bypass
 hasRoleBypass(User $user): bool
+
+// Resolve project from current request URL
+resolveProjectFromRequest(): ?Project
+
+// Resolve environment from current request URL
+resolveEnvironmentFromRequest(): ?Environment
+
+// Check create permission based on URL context (env first, then project)
+canCreateInCurrentContext(User $user): bool
+
+// Check permission via polymorphic parent (for sub-resources like EnvironmentVariable)
+checkResourceablePermission(User $user, $resourceable, string $permission): bool
 ```
 
 ### Models
@@ -94,6 +183,7 @@ hasRoleBypass(User $user): bool
 - Same permission structure as ProjectUser
 - When present, overrides project-level permissions for that environment
 - When absent, project-level permissions cascade down
+- Extends `Pivot` (defaults `$timestamps=false`); migration creates timestamp columns (harmless)
 
 ### Middleware
 
@@ -108,7 +198,7 @@ hasRoleBypass(User $user): bool
 
 **AccessMatrix** (`Livewire/AccessMatrix.php`)
 - Unified permission management component
-- Displays a matrix of users × (projects + environments)
+- Displays a matrix of users x (projects + environments)
 - Each cell is a permission level dropdown
 - Supports bulk operations: All/None per row and per column
 - Environment cells show "inherited" when using project-level cascade
@@ -122,10 +212,26 @@ All policies follow the same pattern:
 ```php
 public function view(User $user, Model $resource): bool
 {
-    if (!PermissionService::isEnabled()) {
+    if (! PermissionService::isEnabled()) {
         return true; // Feature disabled, allow
     }
     return PermissionService::canPerform($user, 'view', $resource);
+}
+
+public function create(User $user): bool
+{
+    if (! PermissionService::isEnabled()) {
+        return true;
+    }
+    return PermissionService::canCreateInCurrentContext($user);
+}
+
+public function manageEnvironment(User $user, Model $resource): bool
+{
+    if (! PermissionService::isEnabled()) {
+        return true;
+    }
+    return PermissionService::canPerform($user, 'manage', $resource);
 }
 ```
 
@@ -133,9 +239,47 @@ public function view(User $user, Model $resource): bool
 - `ApplicationPolicy` - Controls application resources
 - `ProjectPolicy` - Controls project resources
 - `EnvironmentPolicy` - Controls environment resources
-- `ServerPolicy` - Controls server resources
+- `ServerPolicy` - Controls server resources (view always returns true for team members)
 - `ServicePolicy` - Controls service resources
-- `DatabasePolicy` - Controls database resources
+- `DatabasePolicy` - Controls all database types (Postgresql, Mysql, Mariadb, Mongodb, Redis, Keydb, Dragonfly, Clickhouse)
+- `EnvironmentVariablePolicy` - Controls env vars via polymorphic parent traversal
+
+**Registered policy mappings (in registerPolicies()):**
+```
+Application → ApplicationPolicy
+Project → ProjectPolicy
+Environment → EnvironmentPolicy
+Server → ServerPolicy
+Service → ServicePolicy
+StandalonePostgresql → DatabasePolicy
+StandaloneMysql → DatabasePolicy
+StandaloneMariadb → DatabasePolicy
+StandaloneMongodb → DatabasePolicy
+StandaloneRedis → DatabasePolicy
+StandaloneKeydb → DatabasePolicy
+StandaloneDragonfly → DatabasePolicy
+StandaloneClickhouse → DatabasePolicy
+EnvironmentVariable → EnvironmentVariablePolicy
+```
+
+### Scopes
+
+**ProjectPermissionScope** - Filters projects based on user permissions
+**EnvironmentPermissionScope** - Filters environments based on user permissions
+
+### Sub-resource Policy Pattern
+
+For resources like `EnvironmentVariable` that don't directly belong to a project/environment, use the polymorphic parent traversal:
+
+```php
+protected function checkViaParent(User $user, EnvironmentVariable $envVar, string $permission): bool
+{
+    $parent = $envVar->resourceable;  // Application, Service, or Database
+    return PermissionService::checkResourceablePermission($user, $parent, $permission);
+}
+```
+
+`checkResourceablePermission()` resolves the parent's environment and checks permissions accordingly.
 
 ## Development Guidelines
 
@@ -153,7 +297,7 @@ public static function canDoNewThing(User $user, $resource): bool
 ```php
 public function newThing(User $user, Model $resource): bool
 {
-    if (!PermissionService::isEnabled()) {
+    if (! PermissionService::isEnabled()) {
         return true;
     }
     return PermissionService::canDoNewThing($user, $resource);
@@ -170,8 +314,17 @@ Gate::allows('newThing', $resource);
 ### Adding New Resource Types
 
 1. Create policy in `src/Policies/`
-2. Register in service provider's `registerPolicies()` method
+2. Register in service provider's `registerPolicies()` method (inside the `$this->app->booted()` callback)
 3. Add permission checking logic to PermissionService
+4. Update documentation (CLAUDE.md and AGENTS.md)
+
+### Adding New Sub-resource Types
+
+For resources with polymorphic parents:
+
+1. Create policy using `checkViaParent()` pattern (see `EnvironmentVariablePolicy`)
+2. Register in `registerPolicies()`
+3. Add `checkResourceablePermission()` logic if parent type isn't already handled
 4. Update documentation
 
 ### Modifying Permission Levels
@@ -276,6 +429,31 @@ The Dockerfile:
 5. Runs composer dump-autoload
 6. Sets up s6-overlay for migrations
 
+## Common Pitfalls & Lessons Learned
+
+1. **Boot order kills policies** — Our policies registered in `boot()` were silently overwritten by Coolify's `AuthServiceProvider`. Always use `$this->app->booted()`.
+2. **`create()` receives no model** — Laravel's `create()` policy method only gets the User. Must resolve project/environment from request URL.
+3. **Sub-resources need explicit overrides** — Coolify's EnvironmentVariable policy returns `true` for everything. We must register our own override.
+4. **All database types must be registered** — Easy to forget StandaloneKeydb, StandaloneDragonfly, StandaloneClickhouse when listing database policies.
+5. **Use static PermissionService methods in policies** — Don't call `$user->canPerform()` macro in policies. The macro may not be registered yet. Use `PermissionService::canPerform()` directly.
+6. **Environment overrides checked first** — `hasEnvironmentPermission()` checks environment_user FIRST, then falls back to project_user. This is intentional: a user with full_access at project level can be restricted to view_only on a specific environment.
+7. **`EnvironmentVariable` uses polymorphic `resourceable()`** — morphTo relationship to parent Application/Service/Database. Must traverse to find the environment.
+8. **No database changes needed for permission fixes** — The `project_user` and `environment_user` tables store permissions correctly. Issues are always in the code logic, not the data.
+9. **Coolify has no `Gate::before()` callback** — Don't assume one exists. All authorization goes through policies.
+10. **`Pivot` model defaults** — `EnvironmentUser` extends `Pivot` which sets `$timestamps = false` by default, but migration creates timestamp columns. This is harmless.
+
+## Coolify Source Reference
+
+The Coolify source code is cloned at `docs/coolify-source/` (gitignored). Key reference files:
+
+| File | What to check |
+|------|---------------|
+| `app/Providers/AuthServiceProvider.php` | All registered policies and gates |
+| `app/Policies/` | Default policy implementations (all return true) |
+| `resources/views/` | Blade templates using `canGate`, `@can` directives |
+| `app/Livewire/` | Components using `$this->authorize()` |
+| `app/Models/` | Model relationships and structure |
+
 ## Common Tasks
 
 ### Grant user access to project
@@ -311,6 +489,14 @@ PermissionService::grantEnvironmentAccess($user, $environment, 'view_only');
 1. Check feature flag: `config('coolify-permissions.enabled')` should be `true`
 2. Verify environment variable: `COOLIFY_GRANULAR_PERMISSIONS=true`
 3. Check user's team role (owner/admin bypasses all checks)
+4. Verify policies are registered: check `Gate::getPolicyFor(Application::class)` returns our policy class
+5. Check boot order: ensure `$this->app->booted()` is used for policy registration
+
+### Environment override not working
+
+1. Verify `environment_user` record exists for the user+environment
+2. Check that `hasEnvironmentPermission()` is called (not just `hasProjectPermission()`)
+3. Ensure `canCreateInCurrentContext()` checks environment level first
 
 ### Migrations not running
 
