@@ -1,9 +1,9 @@
 <?php
 
-namespace AmirhMoradi\CoolifyPermissions\Services;
+namespace AmirhMoradi\CoolifyEnhanced\Services;
 
-use AmirhMoradi\CoolifyPermissions\Models\EnvironmentUser;
-use AmirhMoradi\CoolifyPermissions\Models\ProjectUser;
+use AmirhMoradi\CoolifyEnhanced\Models\EnvironmentUser;
+use AmirhMoradi\CoolifyEnhanced\Models\ProjectUser;
 use App\Models\User;
 
 class PermissionService
@@ -38,7 +38,7 @@ class PermissionService
      */
     public static function isEnabled(): bool
     {
-        return config('coolify-permissions.enabled', false);
+        return config('coolify-enhanced.enabled', false);
     }
 
     /**
@@ -82,7 +82,7 @@ class PermissionService
         }
 
         // Fall back to project-level permission if cascade is enabled
-        if (config('coolify-permissions.cascade_permissions', true)) {
+        if (config('coolify-enhanced.cascade_permissions', true)) {
             return static::hasProjectPermission($user, $environment->project, $permission);
         }
 
@@ -176,7 +176,7 @@ class PermissionService
      */
     public static function hasRoleBypass(User $user): bool
     {
-        $bypassRoles = config('coolify-permissions.bypass_roles', ['owner', 'admin']);
+        $bypassRoles = config('coolify-enhanced.bypass_roles', ['owner', 'admin']);
         $userRole = $user->teams()->where('teams.id', currentTeam()?->id)->first()?->pivot?->role;
 
         return in_array($userRole, $bypassRoles);

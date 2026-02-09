@@ -1,10 +1,10 @@
 <?php
 
-namespace AmirhMoradi\CoolifyPermissions\Livewire;
+namespace AmirhMoradi\CoolifyEnhanced\Livewire;
 
-use AmirhMoradi\CoolifyPermissions\Models\EnvironmentUser;
-use AmirhMoradi\CoolifyPermissions\Models\ProjectUser;
-use AmirhMoradi\CoolifyPermissions\Services\PermissionService;
+use AmirhMoradi\CoolifyEnhanced\Models\EnvironmentUser;
+use AmirhMoradi\CoolifyEnhanced\Models\ProjectUser;
+use AmirhMoradi\CoolifyEnhanced\Services\PermissionService;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
@@ -35,7 +35,7 @@ class AccessMatrix extends Component
             return;
         }
 
-        $bypassRoles = config('coolify-permissions.bypass_roles', ['owner', 'admin']);
+        $bypassRoles = config('coolify-enhanced.bypass_roles', ['owner', 'admin']);
 
         // Load team members via relationship (includes pivot with role)
         $this->users = $team->members->map(function ($user) use ($bypassRoles) {
@@ -345,7 +345,7 @@ class AccessMatrix extends Component
 
     public function render()
     {
-        return view('coolify-permissions::livewire.access-matrix', [
+        return view('coolify-enhanced::livewire.access-matrix', [
             'filteredUsers' => $this->filteredUsers,
         ]);
     }

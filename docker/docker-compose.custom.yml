@@ -1,4 +1,4 @@
-# Docker Compose custom file for Coolify with Granular Permissions
+# Docker Compose custom file for Coolify Enhanced
 #
 # Copy this file to /data/coolify/source/docker-compose.custom.yml
 # Then run: bash /data/coolify/source/upgrade.sh
@@ -7,8 +7,8 @@
 
 services:
   coolify:
-    # Use your custom image instead of the official one
-    image: ${CUSTOM_COOLIFY_IMAGE:-ghcr.io/amirhmoradi/coolify-granular-permissions:latest}
+    # Use the enhanced image instead of the official one
+    image: ${CUSTOM_COOLIFY_IMAGE:-ghcr.io/amirhmoradi/coolify-enhanced:latest}
     environment:
-      # Enable granular permissions
-      - COOLIFY_GRANULAR_PERMISSIONS=true
+      # Enable Coolify Enhanced (granular permissions + encrypted backups)
+      - COOLIFY_ENHANCED=true

@@ -1,6 +1,6 @@
 <?php
 
-use AmirhMoradi\CoolifyPermissions\Http\Controllers\Api\PermissionsController;
+use AmirhMoradi\CoolifyEnhanced\Http\Controllers\Api\PermissionsController;
 use Illuminate\Support\Facades\Route;
 
 /*

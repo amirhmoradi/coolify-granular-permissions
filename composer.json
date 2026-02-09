@@ -1,6 +1,6 @@
 {
-    "name": "amirhmoradi/coolify-granular-permissions",
-    "description": "Granular user role and project-level access management for Coolify v4",
+    "name": "amirhmoradi/coolify-enhanced",
+    "description": "Enhanced Coolify v4 with granular permissions and encrypted S3 backups",
     "type": "library",
     "license": "MIT",
     "keywords": [
@@ -8,6 +8,9 @@
         "permissions",
         "access-control",
         "rbac",
+        "backup-encryption",
+        "rclone",
+        "s3",
         "laravel"
     ],
     "authors": [
@@ -16,25 +19,25 @@
             "email": "amir@example.com"
         }
     ],
-    "homepage": "https://github.com/amirhmoradi/coolify-granular-permissions",
+    "homepage": "https://github.com/amirhmoradi/coolify-enhanced",
     "support": {
-        "issues": "https://github.com/amirhmoradi/coolify-granular-permissions/issues",
-        "source": "https://github.com/amirhmoradi/coolify-granular-permissions"
+        "issues": "https://github.com/amirhmoradi/coolify-enhanced/issues",
+        "source": "https://github.com/amirhmoradi/coolify-enhanced"
     },
     "autoload": {
         "psr-4": {
-            "AmirhMoradi\\CoolifyPermissions\\": "src/"
+            "AmirhMoradi\\CoolifyEnhanced\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "AmirhMoradi\\CoolifyPermissions\\Tests\\": "tests/"
+            "AmirhMoradi\\CoolifyEnhanced\\Tests\\": "tests/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "AmirhMoradi\\CoolifyPermissions\\CoolifyPermissionsServiceProvider"
+                "AmirhMoradi\\CoolifyEnhanced\\CoolifyEnhancedServiceProvider"
             ]
         }
     },

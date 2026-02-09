@@ -13,7 +13,12 @@ This file provides guidance to **Claude Code** and other AI assistants when work
 
 ## Project Overview
 
-This is a Laravel package that extends Coolify v4 with granular user role and project-level access management. It does NOT modify Coolify directly but extends it via Laravel's service provider and policy override system.
+This is a Laravel package that extends Coolify v4 with two main features:
+
+1. **Granular Permissions** — Project-level and environment-level access management with role-based overrides
+2. **Encrypted S3 Backups** — Transparent encryption at rest for all database backups using rclone's crypt backend (NaCl SecretBox: XSalsa20 + Poly1305)
+
+It does NOT modify Coolify directly but extends it via Laravel's service provider and policy override system. For encryption, modified Coolify files are overlaid in the Docker image.
 
 ## Critical Architecture Knowledge
 
@@ -24,10 +29,11 @@ Laravel boots **package providers BEFORE application providers**. Coolify's `Aut
 **Solution:** We defer policy registration to `$this->app->booted()` callback, which executes AFTER all providers have booted. This ensures our `Gate::policy()` calls get the last word.
 
 ```php
-// In CoolifyPermissionsServiceProvider::boot()
+// In CoolifyEnhancedServiceProvider::boot()
 $this->app->booted(function () {
     $this->registerPolicies();
     $this->registerUserMacros();
+    $this->extendS3StorageModel();
 });
 ```
 
@@ -68,19 +74,33 @@ Laravel's `create()` policy method does **not** receive a model instance — onl
 
 Resources like `EnvironmentVariable` use polymorphic relationships (`resourceable()` morphTo) to their parent (Application/Service/Database). Our `EnvironmentVariablePolicy` traverses this relationship to find the environment and check permissions via `PermissionService::checkResourceablePermission()`.
 
+### Encrypted S3 Backups Architecture
+
+The encryption feature uses rclone's crypt backend (NaCl SecretBox) to transparently encrypt database backups before uploading to S3. Key design decisions:
+
+- **File overlay approach**: Modified versions of Coolify files (`DatabaseBackupJob.php`, `Import.php`, `databases.php`) are copied over the originals in the Docker image
+- **Environment-variable rclone config**: No config file needed — uses `RCLONE_CONFIG_<REMOTE>_<OPTION>` pattern
+- **Password obscuring**: Implements rclone's obscure algorithm in PHP (AES-256-CTR with well-known fixed key)
+- **Env file for Docker**: Base64-encoded env file written to server, passed via `--env-file` to rclone container
+- **Backward compatible**: Tracks `is_encrypted` per backup execution; uses mc for unencrypted, rclone for encrypted
+- **Filename encryption**: Default `off`, optional `standard`/`obfuscate` modes; when enabled, all S3 ops go through rclone
+
 ## Quick Reference
 
 ### Package Structure
 
 ```
-coolify-granular-permissions/
+coolify-enhanced/
 ├── src/
-│   ├── CoolifyPermissionsServiceProvider.php  # Main service provider
+│   ├── CoolifyEnhancedServiceProvider.php     # Main service provider
 │   ├── Services/
-│   │   └── PermissionService.php              # Core permission logic
+│   │   ├── PermissionService.php              # Core permission logic
+│   │   └── RcloneService.php                  # Rclone encryption commands
 │   ├── Models/
 │   │   ├── ProjectUser.php                    # Project access pivot
 │   │   └── EnvironmentUser.php                # Environment override pivot
+│   ├── Traits/
+│   │   └── HasS3Encryption.php                # S3 encryption helpers for model
 │   ├── Policies/                              # Laravel policies (override Coolify's)
 │   │   ├── ApplicationPolicy.php
 │   │   ├── DatabasePolicy.php
@@ -92,15 +112,24 @@ coolify-granular-permissions/
 │   ├── Scopes/                                # Eloquent global scopes
 │   │   ├── ProjectPermissionScope.php
 │   │   └── EnvironmentPermissionScope.php
+│   ├── Overrides/                             # Modified Coolify files (overlay)
+│   │   ├── Jobs/
+│   │   │   └── DatabaseBackupJob.php          # Encryption-aware backup job
+│   │   ├── Livewire/Project/Database/
+│   │   │   └── Import.php                     # Encryption-aware restore
+│   │   └── Helpers/
+│   │       └── databases.php                  # Encryption-aware S3 delete
 │   ├── Http/
 │   │   ├── Controllers/Api/                   # API controllers
 │   │   └── Middleware/
 │   │       └── InjectPermissionsUI.php        # UI injection middleware
 │   └── Livewire/
-│       └── AccessMatrix.php                   # Access matrix component
+│       ├── AccessMatrix.php                   # Access matrix component
+│       └── StorageEncryptionForm.php          # Encryption settings component
 ├── database/migrations/                        # Database migrations
 ├── resources/views/livewire/
-│   └── access-matrix.blade.php                # Matrix table view
+│   ├── access-matrix.blade.php                # Matrix table view
+│   └── storage-encryption-form.blade.php      # Encryption form view
 ├── routes/                                     # API routes
 ├── config/                                     # Package configuration
 ├── docker/                                     # Docker build files
@@ -114,13 +143,19 @@ coolify-granular-permissions/
 
 | File | Purpose |
 |------|---------|
-| `src/CoolifyPermissionsServiceProvider.php` | Main service provider, policy registration |
+| `src/CoolifyEnhancedServiceProvider.php` | Main service provider, policy registration |
 | `src/Services/PermissionService.php` | All permission checking logic |
+| `src/Services/RcloneService.php` | Rclone Docker commands for encrypted S3 ops |
+| `src/Traits/HasS3Encryption.php` | Encryption helpers for S3Storage model |
 | `src/Policies/EnvironmentVariablePolicy.php` | Sub-resource policy via polymorphic parent |
 | `src/Livewire/AccessMatrix.php` | Unified access management UI |
+| `src/Livewire/StorageEncryptionForm.php` | S3 encryption settings UI |
+| `src/Overrides/Jobs/DatabaseBackupJob.php` | Encryption-aware backup job overlay |
+| `src/Overrides/Livewire/Project/Database/Import.php` | Encryption-aware restore overlay |
+| `src/Overrides/Helpers/databases.php` | Encryption-aware S3 delete overlay |
 | `src/Http/Middleware/InjectPermissionsUI.php` | Injects UI into Coolify pages |
 | `src/Models/ProjectUser.php` | Permission levels and helpers |
-| `config/coolify-permissions.php` | Configuration options |
+| `config/coolify-enhanced.php` | Configuration options |
 | `docs/coolify-source/` | Coolify source reference (gitignored) |
 | `docker/Dockerfile` | Custom Coolify image build |
 | `docker/docker-compose.custom.yml` | Compose override template |
@@ -132,7 +167,7 @@ coolify-granular-permissions/
 ```bash
 # No local development - this is deployed via Docker
 # Build custom image
-docker build --build-arg COOLIFY_VERSION=latest -t coolify-custom:latest -f docker/Dockerfile .
+docker build --build-arg COOLIFY_VERSION=latest -t coolify-enhanced:latest -f docker/Dockerfile .
 
 # Setup menu (interactive)
 sudo bash install.sh
@@ -140,7 +175,7 @@ sudo bash install.sh
 # Install Coolify on a fresh server
 sudo bash install.sh --install-coolify
 
-# Install the permissions addon
+# Install the enhanced addon
 sudo bash install.sh --install-addon
 
 # Full setup (Coolify + addon) non-interactive
@@ -176,7 +211,11 @@ Owners and Admins bypass all permission checks. Only Members and Viewers need ex
 
 ### UI Injection
 
-The Access Matrix UI is injected into Coolify's `/team/admin` page via the `InjectPermissionsUI` middleware. No standalone web routes exist — the UI is always part of the existing Coolify page.
+The middleware injects UI components into existing Coolify pages:
+- **Access Matrix** — injected into `/team/admin` page (for admin/owner users)
+- **Storage Encryption Form** — injected into `/storages/{uuid}` page
+
+No standalone web routes exist — the UI is always part of the existing Coolify page.
 
 ## Common Pitfalls
 
@@ -187,14 +226,18 @@ The Access Matrix UI is injected into Coolify's `/team/admin` page via the `Inje
 5. **Use `PermissionService::canPerform()` directly** — Don't rely on `$user->canPerform()` macro in policies; use the static method instead.
 6. **Environment overrides are checked first** — `hasEnvironmentPermission()` checks environment_user table first, falls back to project_user.
 7. **`EnvironmentVariable` uses `resourceable()`** — Polymorphic morphTo relationship to parent Application/Service/Database.
+8. **Rclone password obscuring** — Uses AES-256-CTR with a well-known fixed key from rclone source. The PHP implementation must match exactly (base64url encoding, no padding).
+9. **Env file cleanup** — Always clean up the base64-encoded env file and rclone container after operations to avoid credential leaks.
+10. **Filename encryption and S3 operations** — When `filename_encryption != 'off'`, S3 filenames are encrypted; must use rclone (not Laravel Storage) for listing/deleting files.
 
 ## Important Notes
 
-1. **This is an addon** - It doesn't modify Coolify core files
-2. **Feature flag** - Set `COOLIFY_GRANULAR_PERMISSIONS=true` to enable
+1. **This is an addon** - It extends Coolify via overlay files and service provider
+2. **Feature flag** - Set `COOLIFY_ENHANCED=true` to enable (backward compat: `COOLIFY_GRANULAR_PERMISSIONS=true` also works)
 3. **docker-compose.custom.yml** - Coolify natively supports this file for overrides
 4. **v5 compatibility** - Coolify v5 may include similar features; migration guide will be provided
 5. **Backward compatible** - When disabled, behaves like standard Coolify
+6. **Encryption is per-storage** - Each S3 storage destination can independently enable encryption
 
 ## See Also
 

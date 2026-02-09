@@ -1,15 +1,16 @@
 # Architecture
 
-This document describes the architecture of the Coolify Granular Permissions package.
+This document describes the architecture of the Coolify Enhanced package.
 
 ## Overview
 
-The package extends Coolify's authorization system without modifying core files. It uses Laravel's service provider system to:
+The package extends Coolify's authorization system and backup pipeline without modifying core files. It uses Laravel's service provider system to:
 
 1. Override default policies with permission-aware versions
-2. Add new database tables for permission storage
-3. Provide UI components for permission management
+2. Add new database tables for permission storage and encryption settings
+3. Provide UI components for permission management and encryption configuration
 4. Expose API endpoints for programmatic access
+5. Overlay modified Coolify files for encryption-aware backup/restore/delete
 
 ## System Design
 
@@ -36,7 +37,8 @@ The package extends Coolify's authorization system without modifying core files.
 ├─────────────────────────────┼────────────────────────────────────┤
 │                             │                                    │
 │  ┌─────────────────────────▼───────────────────────────────┐   │
-│  │              Granular Permissions Package                │   │
+│  │                  Coolify Enhanced Package                │   │
+│  │                                                          │   │
 │  │  ┌────────────────────────────────────────────────────┐ │   │
 │  │  │              Policy Overrides                       │ │   │
 │  │  │  (ApplicationPolicy, ProjectPolicy, etc.)           │ │   │
@@ -52,9 +54,21 @@ The package extends Coolify's authorization system without modifying core files.
 │  │  └────────────────────────┬───────────────────────────┘ │   │
 │  │                           │                              │   │
 │  │  ┌────────────────────────▼───────────────────────────┐ │   │
+│  │  │              RcloneService                          │ │   │
+│  │  │  - isEncryptionEnabled()                            │ │   │
+│  │  │  - obscurePassword()                                │ │   │
+│  │  │  - buildUploadCommands()                            │ │   │
+│  │  │  - buildDownloadCommands()                          │ │   │
+│  │  │  - buildDeleteCommands()                            │ │   │
+│  │  └────────────────────────┬───────────────────────────┘ │   │
+│  │                           │                              │   │
+│  │  ┌────────────────────────▼───────────────────────────┐ │   │
 │  │  │              Database Tables                        │ │   │
 │  │  │  - project_user (project access)                    │ │   │
 │  │  │  - environment_user (environment overrides)         │ │   │
+│  │  │  - s3_storages (encryption columns added)           │ │   │
+│  │  │  - scheduled_database_backup_executions             │ │   │
+│  │  │    (is_encrypted column added)                      │ │   │
 │  │  └────────────────────────────────────────────────────┘ │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                                                                  │
@@ -112,6 +126,68 @@ Check environment permission
         └── no ──► Fall back to ProjectUser permissions
 ```
 
+## Encrypted Backup Flow
+
+### Upload (Backup)
+
+```
+DatabaseBackupJob::upload_to_s3()
+        │
+        ▼
+  S3Storage has encryption enabled?
+        │
+        ├── no ──► upload_to_s3_unencrypted() [original mc behavior]
+        │
+        └── yes ──► upload_to_s3_encrypted()
+                         │
+                         ▼
+                   RcloneService::buildUploadCommands()
+                         │
+                         ├── Build base64 env file (S3 + crypt config)
+                         ├── Write env file to server
+                         ├── Docker run rclone/rclone with --env-file
+                         ├── rclone copy local:backup encrypted:path
+                         ├── Mark backup execution as is_encrypted=true
+                         └── Cleanup env file + container
+```
+
+### Download (Restore)
+
+```
+Import::restoreFromS3()
+        │
+        ▼
+  Storage has encryption?
+        │
+        ├── no ──► restoreFromS3Unencrypted() [original mc behavior]
+        │
+        └── yes ──► restoreFromS3Encrypted()
+                         │
+                         ▼
+                   RcloneService::buildDownloadCommands()
+                         │
+                         ├── Build env file, write to server
+                         ├── Docker run rclone copy encrypted:file local:dest
+                         └── Cleanup
+```
+
+### Delete (Cleanup)
+
+```
+deleteBackupsS3()
+        │
+        ▼
+  S3Storage has filename encryption?
+        │
+        ├── no ──► Laravel Storage S3 driver delete [original behavior]
+        │
+        └── yes ──► RcloneService::buildDeleteCommands()
+                         │
+                         ├── Build env file, write to server
+                         ├── Docker run rclone deletefile encrypted:path
+                         └── Cleanup
+```
+
 ## Database Schema
 
 ### project_user Table
@@ -148,11 +224,20 @@ CREATE TABLE environment_user (
 );
 ```
 
-### User Table Extensions
+### s3_storages Table (Added Columns)
 
 ```sql
-ALTER TABLE users ADD COLUMN is_global_admin BOOLEAN DEFAULT false;
-ALTER TABLE users ADD COLUMN status VARCHAR(255) DEFAULT 'active';
+ALTER TABLE s3_storages ADD COLUMN encryption_enabled BOOLEAN DEFAULT false;
+ALTER TABLE s3_storages ADD COLUMN encryption_password LONGTEXT NULL;
+ALTER TABLE s3_storages ADD COLUMN encryption_salt LONGTEXT NULL;
+ALTER TABLE s3_storages ADD COLUMN filename_encryption VARCHAR(255) DEFAULT 'off';
+ALTER TABLE s3_storages ADD COLUMN directory_name_encryption BOOLEAN DEFAULT false;
+```
+
+### scheduled_database_backup_executions Table (Added Column)
+
+```sql
+ALTER TABLE scheduled_database_backup_executions ADD COLUMN is_encrypted BOOLEAN DEFAULT false;
 ```
 
 ## Component Architecture
@@ -163,43 +248,46 @@ ALTER TABLE users ADD COLUMN status VARCHAR(255) DEFAULT 'active';
 Application Boot
       │
       ▼
-CoolifyPermissionsServiceProvider::register()
+CoolifyEnhancedServiceProvider::register()
       │
       ├── Merge configuration
       │
       ▼
-CoolifyPermissionsServiceProvider::boot()
+CoolifyEnhancedServiceProvider::boot()
       │
       ├── Load migrations
       ├── Load views with namespace
       ├── Load API routes
-      ├── Register Livewire components (AccessMatrix)
+      ├── Register Livewire components (AccessMatrix, StorageEncryptionForm)
       ├── Register InjectPermissionsUI middleware
-      ├── Override policies via Gate::policy()
-      └── Extend User model with permission macros
+      ├── Register global scopes
+      └── Schedule booted callback:
+            ├── Override policies via Gate::policy()
+            ├── Register User macros
+            └── Extend S3Storage model
 ```
 
 ### UI Injection Mechanism
 
-The package injects its Access Matrix UI into Coolify's existing `/team/admin` page using HTTP middleware:
+The package injects its UI components into Coolify's existing pages using HTTP middleware:
 
 ```
-HTTP Request to /team/admin
+HTTP Request
       │
       ▼
 InjectPermissionsUI middleware
       │
-      ├── Is team page? ──── No → Pass through
-      │ Yes
       ├── Is HTML response? ── No → Pass through
       │ Yes
-      ├── Is user admin/owner? ── No → Pass through
+      ├── Is authenticated? ── No → Pass through
       │ Yes
-      ├── Render AccessMatrix Livewire component via Blade::render()
-      └── Inject rendered HTML before </body>
-            │
-            ▼
-      Positioning script moves component to correct location in DOM
+      ├── Is /team/admin page AND user is admin/owner?
+      │     ├── Yes → Render AccessMatrix, inject before </body>
+      │     └── No → Skip
+      ├── Is /storages/{uuid} page?
+      │     ├── Yes → Render StorageEncryptionForm, inject before </body>
+      │     └── No → Skip
+      └── Positioning scripts move components to correct DOM locations
 ```
 
 ### Policy Override Mechanism
@@ -207,13 +295,35 @@ InjectPermissionsUI middleware
 The package uses Laravel's `Gate::policy()` to override Coolify's default policies:
 
 ```php
-// In CoolifyPermissionsServiceProvider::registerPolicies()
+// In CoolifyEnhancedServiceProvider::registerPolicies()
 Gate::policy(Application::class, ApplicationPolicy::class);
 Gate::policy(Project::class, ProjectPolicy::class);
 // ... etc
 ```
 
 This ensures that whenever Coolify checks authorization, our permission-aware policies are used instead.
+
+### Rclone Encryption Mechanism
+
+The encryption uses rclone's crypt backend with environment-variable configuration:
+
+```
+RCLONE_CONFIG_S3REMOTE_TYPE=s3
+RCLONE_CONFIG_S3REMOTE_PROVIDER=Other
+RCLONE_CONFIG_S3REMOTE_ACCESS_KEY_ID=...
+RCLONE_CONFIG_S3REMOTE_SECRET_ACCESS_KEY=...
+RCLONE_CONFIG_S3REMOTE_ENDPOINT=...
+RCLONE_CONFIG_S3REMOTE_REGION=...
+
+RCLONE_CONFIG_ENCRYPTED_TYPE=crypt
+RCLONE_CONFIG_ENCRYPTED_REMOTE=s3remote:{bucket}
+RCLONE_CONFIG_ENCRYPTED_PASSWORD={obscured_password}
+RCLONE_CONFIG_ENCRYPTED_PASSWORD2={obscured_salt}  (optional)
+RCLONE_CONFIG_ENCRYPTED_FILENAME_ENCRYPTION={off|standard|obfuscate}
+RCLONE_CONFIG_ENCRYPTED_DIRECTORY_NAME_ENCRYPTION={true|false}
+```
+
+Password obscuring uses rclone's algorithm: AES-256-CTR with a fixed well-known key, base64url encoded.
 
 ## Caching Strategy
 
@@ -253,7 +363,7 @@ install.sh
       ├── Detect Coolify at /data/coolify/source/
       ├── Pull GHCR image or build locally (--local)
       ├── Create docker-compose.custom.yml
-      ├── Set COOLIFY_GRANULAR_PERMISSIONS=true in .env
+      ├── Set COOLIFY_ENHANCED=true in .env
       ├── Run upgrade.sh to restart stack
       └── Verify installation
 
@@ -285,10 +395,19 @@ Official Coolify Image
    composer require package
         │
         ▼
+   Overlay modified Coolify files:
+   ├── DatabaseBackupJob.php → app/Jobs/
+   ├── Import.php → app/Livewire/Project/Database/
+   └── databases.php → bootstrap/helpers/
+        │
+        ▼
    Setup s6-overlay service
         │
         ▼
-   Custom Coolify Image with Granular Permissions
+   composer dump-autoload
+        │
+        ▼
+   Custom Coolify Image with Enhanced Features
 ```
 
 ### S6-Overlay Service
@@ -320,6 +439,7 @@ S6-Overlay Init
 2. **Service Layer**: PermissionService provides centralized logic
 3. **Database Layer**: Foreign key constraints ensure data integrity
 4. **UI Layer**: Form components check authorization before rendering
+5. **Encryption Layer**: NaCl SecretBox (XSalsa20 + Poly1305) for backups
 
 ### Role Bypass Security
 
@@ -328,6 +448,13 @@ Owner and Admin roles bypass all permission checks. This is intentional:
 - Owners need full control to manage their team
 - Admins are trusted team administrators
 - Restricting them would break expected Coolify behavior
+
+### Encryption Security
+
+- Passwords are stored encrypted in the database (Laravel's `encrypted` cast pattern)
+- Rclone env files are base64-encoded and cleaned up immediately after use
+- Password obscuring uses rclone's standard algorithm (not for security, but for rclone compatibility)
+- The actual encryption is NaCl SecretBox — industry-standard authenticated encryption
 
 ### API Security
 

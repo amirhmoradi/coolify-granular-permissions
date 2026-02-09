@@ -1,9 +1,9 @@
 <?php
 
-namespace AmirhMoradi\CoolifyPermissions\Scopes;
+namespace AmirhMoradi\CoolifyEnhanced\Scopes;
 
-use AmirhMoradi\CoolifyPermissions\Models\EnvironmentUser;
-use AmirhMoradi\CoolifyPermissions\Services\PermissionService;
+use AmirhMoradi\CoolifyEnhanced\Models\EnvironmentUser;
+use AmirhMoradi\CoolifyEnhanced\Services\PermissionService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;

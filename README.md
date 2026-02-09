@@ -1,29 +1,37 @@
-# Coolify Granular Permissions
+# Coolify Enhanced
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build and Publish Docker Image](https://github.com/amirhmoradi/coolify-granular-permissions/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/amirhmoradi/coolify-granular-permissions/actions/workflows/docker-publish.yml)
-[![Docker Image](https://img.shields.io/badge/ghcr.io-coolify--granular--permissions-blue)](https://ghcr.io/amirhmoradi/coolify-granular-permissions)
+[![Docker Image](https://img.shields.io/badge/ghcr.io-coolify--enhanced-blue)](https://ghcr.io/amirhmoradi/coolify-enhanced)
 
-**Granular user role and project-level access management for Coolify v4**
+**Granular permissions and encrypted S3 backups for Coolify v4**
 
-> **Note**: This addon is designed for Coolify v4. Coolify v5 is expected to include similar functionality natively. When v5 is released with built-in granular permissions, we will provide a migration guide.
+> **Note**: This addon is designed for Coolify v4. Coolify v5 is expected to include similar functionality natively. When v5 is released, we will provide a migration guide.
 
-## TL;DR - Show me:
-<img width="2378" height="1964" alt="coolify-granular-permissions-screenshot" src="https://github.com/user-attachments/assets/0fd6b8ee-d9a8-4154-b09e-a6dbe2d4e46a" />
+## Features
 
-
-
-## Overview
-
-This Laravel package extends Coolify with fine-grained access control:
-
+### Granular Permissions
 - **Project-level permissions**: Grant users access to specific projects only
 - **Permission levels**: View Only, Deploy, Full Access
 - **Environment overrides**: Fine-tune access per environment within each project
 - **Access Matrix UI**: Unified table to manage all users, projects, and environments at a glance
 - **API support**: Full REST API for permission management
+
+### Encrypted S3 Backups
+- **Encryption at rest**: All database backups encrypted using rclone's crypt backend (NaCl SecretBox: XSalsa20 + Poly1305)
+- **Per-storage configuration**: Enable encryption independently on each S3 storage destination
+- **Full rclone crypt options**: Main password, salt (password2), filename encryption (off/standard/obfuscate), directory name encryption
+- **Transparent operation**: Encrypted on upload, decrypted on download — no manual steps
+- **Backward compatible**: Existing unencrypted backups continue to work alongside encrypted ones
+- **Database coverage**: PostgreSQL, MySQL, MariaDB, MongoDB backup/restore/cleanup
+
+### Common
 - **Install/Uninstall scripts**: Automated setup with Coolify detection
 - **Backward compatible**: Feature flag for safe rollout
+- **Docker deployed**: Custom image extending official Coolify
+
+## TL;DR - Show me:
+<img width="2378" height="1964" alt="coolify-granular-permissions-screenshot" src="https://github.com/user-attachments/assets/0fd6b8ee-d9a8-4154-b09e-a6dbe2d4e46a" />
 
 ## Requirements
 
@@ -43,7 +51,7 @@ sudo bash install.sh
 
 Running without arguments opens an interactive menu where you can:
 1. **Install Coolify** from the official repository (for fresh servers)
-2. **Install the Permissions Addon** (requires Coolify)
+2. **Install the Enhanced Addon** (requires Coolify)
 3. **Uninstall** the addon
 4. **Check Status** of your installation
 5. **Full Setup** (Coolify + addon in one step)
@@ -70,9 +78,9 @@ Create `/data/coolify/source/docker-compose.custom.yml`:
 ```yaml
 services:
   coolify:
-    image: ghcr.io/amirhmoradi/coolify-granular-permissions:latest
+    image: ghcr.io/amirhmoradi/coolify-enhanced:latest
     environment:
-      - COOLIFY_GRANULAR_PERMISSIONS=true
+      - COOLIFY_ENHANCED=true
 ```
 
 Restart Coolify:
@@ -97,7 +105,7 @@ Or build manually:
 ```bash
 docker build \
   --build-arg COOLIFY_VERSION=latest \
-  -t coolify-custom:latest \
+  -t coolify-enhanced:latest \
   -f docker/Dockerfile .
 ```
 
@@ -127,26 +135,31 @@ For manual uninstall, see [Installation Guide](docs/installation.md#reverting-to
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `COOLIFY_GRANULAR_PERMISSIONS` | `false` | Enable/disable the granular permissions system |
+| `COOLIFY_ENHANCED` | `false` | Enable/disable the enhanced features |
+
+> For backward compatibility, `COOLIFY_GRANULAR_PERMISSIONS=true` is also supported.
 
 ### Configuration File
 
 Publish the config file for customization:
 
 ```bash
-php artisan vendor:publish --tag=coolify-permissions-config
+php artisan vendor:publish --tag=coolify-enhanced-config
 ```
 
-This creates `config/coolify-permissions.php` with options for:
+This creates `config/coolify-enhanced.php` with options for:
 
 - Permission levels and their capabilities
 - Roles that bypass permission checks
 - Permission cascade behavior
 - Auto-grant settings for new projects
+- Rclone Docker image for backup encryption
 
 ## Usage
 
-### Access Matrix UI
+### Granular Permissions
+
+#### Access Matrix UI
 
 The access management interface is injected into Coolify's existing **Team > Admin** page. Navigate to `/team/admin` as an admin or owner to see the **Granular Access Management** section.
 
@@ -158,7 +171,7 @@ The Access Matrix provides:
 - Search/filter for users
 - Visual indicators for role bypass (owner/admin), inheritance, and permission levels
 
-### API Endpoints
+#### API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -168,15 +181,26 @@ The Access Matrix provides:
 | DELETE | `/api/v1/projects/{uuid}/access/{user_id}` | Revoke access |
 | GET | `/api/v1/projects/{uuid}/access/{user_id}/check` | Check permission |
 
-### API Example
+### Encrypted S3 Backups
 
-```bash
-# Grant deploy access to a user
-curl -X POST "https://your-coolify.com/api/v1/projects/abc123/access" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": 5, "permission_level": "deploy"}'
-```
+#### Storage Encryption Settings
+
+The encryption form is injected into each **S3 Storage Detail** page (`/storages/{uuid}`). Configure per-storage:
+
+1. **Enable encryption** — Toggle on/off
+2. **Encryption password** — Main encryption key (required)
+3. **Salt (password2)** — Optional secondary key for extra security
+4. **Filename encryption** — `off` (default), `standard`, or `obfuscate`
+5. **Directory name encryption** — Encrypt directory names (requires filename encryption)
+
+> **Warning**: If you lose the encryption password, your backups cannot be recovered.
+
+#### How It Works
+
+- When encryption is **enabled** on an S3 storage, all new database backups to that storage are encrypted using rclone's crypt backend before upload
+- When encryption is **disabled** or for existing unencrypted backups, the original MinIO client (`mc`) behavior is preserved
+- Each backup execution tracks whether it was encrypted via `is_encrypted` field
+- Restore operations detect encryption status and use rclone to decrypt as needed
 
 ## Permission Levels
 
@@ -200,7 +224,7 @@ curl -X POST "https://your-coolify.com/api/v1/projects/abc123/access" \
 ### Permission Check Flow
 
 ```
-User Action -> Policy Check -> Is Granular Enabled?
+User Action -> Policy Check -> Is Feature Enabled?
                                     |
                     +---------------+---------------+
                     | No                            | Yes
@@ -223,17 +247,29 @@ User Action -> Policy Check -> Is Granular Enabled?
                                           Allow           Deny
 ```
 
-### Access Matrix
+### Backup Encryption Flow
 
 ```
-+----------+-----------+-----------+-------+-------+-----------+------+
-| User     | Role      | Project A               | Project B          |
-|          |           | Project | Prod  | Stage | Project | Dev    |
-+----------+-----------+---------+-------+-------+---------+--------+
-| John     | owner     | bypass  |bypass |bypass | bypass  |bypass  |
-| Jane     | member    | full    | inh.  | dep.  | view    | inh.   |
-| Bob      | viewer    | none    | none  | view  | deploy  | inh.   |
-+----------+-----------+---------+-------+-------+---------+--------+
+Backup Job → S3 Storage has encryption?
+                    |
+        +-----------+-----------+
+        | No                    | Yes
+        v                       v
+  mc upload (original)    rclone crypt upload
+                                |
+                          Build env file with:
+                          - S3 remote config
+                          - Crypt remote config
+                          - Obscured passwords
+                                |
+                          Docker run rclone container
+                          with --env-file
+                                |
+                          Upload encrypted backup
+                                |
+                          Mark is_encrypted=true
+                                |
+                          Cleanup env file + container
 ```
 
 ### Database Schema
@@ -245,19 +281,20 @@ User Action -> Policy Check -> Is Granular Enabled?
 | id            |--+    | id            |    +--| id            |
 | name          |  |    | user_id       |----+  | name          |
 | email         |  +----| project_id    |-------| team_id       |
-| is_global_    |       | permissions   |       +---------------+
-|   admin       |       +---------------+
-| status        |
-+---------------+
++---------------+       | permissions   |       +---------------+
+                        +---------------+
 
-+-------------------+
-| environment_user  |
-+-------------------+
-| id                |
-| user_id           |
-| environment_id    |
-| permissions       |
-+-------------------+
++-------------------+       +-------------------+
+| environment_user  |       |   s3_storages     |
++-------------------+       +-------------------+
+| id                |       | ...existing...    |
+| user_id           |       | encryption_enabled|
+| environment_id    |       | encryption_password|
+| permissions       |       | encryption_salt   |
++-------------------+       | filename_encryption|
+                            | directory_name_   |
+                            |   encryption      |
+                            +-------------------+
 ```
 
 ## Upgrading Coolify
@@ -272,7 +309,7 @@ When upgrading Coolify to a new version:
 ```bash
 docker build \
   --build-arg COOLIFY_VERSION=v4.0.1 \
-  -t coolify-custom:v4.0.1 \
+  -t coolify-enhanced:v4.0.1 \
   -f docker/Dockerfile \
   .
 ```
@@ -288,7 +325,7 @@ Or manually:
 ```bash
 cd /data/coolify/source
 rm docker-compose.custom.yml
-sed -i '/COOLIFY_GRANULAR_PERMISSIONS/d' .env
+sed -i '/COOLIFY_ENHANCED/d' .env
 bash upgrade.sh
 ```
 
@@ -320,4 +357,5 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Acknowledgments
 
 - [Coolify](https://coolify.io) - The amazing self-hostable platform this addon extends
+- [rclone](https://rclone.org) - Powerful cloud storage tool providing the encryption backend
 - [Dokploy](https://dokploy.com) - Inspiration for the permission model

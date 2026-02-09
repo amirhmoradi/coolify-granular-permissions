@@ -15,7 +15,7 @@
         <div class="flex items-center justify-between mb-2 gap-4">
             <div class="flex items-center gap-3 flex-1 min-w-0">
                 <h2 class="truncate">Granular Access Management</h2>
-                @if(! config('coolify-permissions.enabled', false))
+                @if(! config('coolify-enhanced.enabled', false))
                     <span class="inline-flex items-center px-3 py-1 text-xs font-semibold rounded border border-orange-300 dark:border-yellow-600 bg-orange-50 dark:bg-yellow-900/30 text-orange-700 dark:text-warning shrink-0">
                         Disabled
                     </span>
@@ -65,7 +65,7 @@
             Manage per-user access to projects and environments. Owners and Admins bypass all checks.
         </div>
 
-        @if(! config('coolify-permissions.enabled', false))
+        @if(! config('coolify-enhanced.enabled', false))
             <div class="rounded border border-orange-300 dark:border-yellow-700 bg-orange-50 dark:bg-yellow-900/20 p-4 mb-6">
                 <p class="text-sm text-orange-800 dark:text-yellow-200">
                     Granular permissions are currently disabled. Set <code class="px-1.5 py-0.5 rounded text-xs bg-neutral-200 dark:bg-coolgray-300 font-mono">COOLIFY_GRANULAR_PERMISSIONS=true</code> in your environment to enable.
