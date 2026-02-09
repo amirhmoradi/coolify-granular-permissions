@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Detailed instructions for AI assistants working with the Coolify Granular Permissions package.
+Detailed instructions for AI assistants working with the Coolify Enhanced package.
 
 ## Mandatory Rules
 
@@ -11,15 +11,20 @@ Detailed instructions for AI assistants working with the Coolify Granular Permis
 
 ## Package Context
 
-This is a **Laravel package** that extends Coolify v4 with granular user role and project-level access management. It does NOT modify Coolify directly but extends it via Laravel's service provider and policy override system.
+This is a **Laravel package** that extends Coolify v4 with:
+
+1. **Granular permissions** — Project-level and environment-level access management
+2. **Encrypted S3 backups** — Transparent encryption at rest using rclone's crypt backend
+
+It does NOT modify Coolify directly but extends it via Laravel's service provider and policy override system. For encryption, modified Coolify files are overlaid in the Docker image.
 
 ### Key Characteristics
 
-1. **Addon, not core modification** - All code lives in a separate package
-2. **Feature-flagged** - Controlled by `COOLIFY_GRANULAR_PERMISSIONS=true`
+1. **Addon, not core modification** - All code lives in a separate package (with overlay files for encryption)
+2. **Feature-flagged** - Controlled by `COOLIFY_ENHANCED=true` (backward compat: `COOLIFY_GRANULAR_PERMISSIONS=true`)
 3. **Backward compatible** - When disabled, Coolify behaves normally
 4. **Docker-deployed** - Installed via custom Docker image extending official Coolify
-5. **UI injection** - Access Matrix is injected into Coolify's `/team/admin` page via middleware
+5. **UI injection** - Access Matrix injected into `/team/admin`, Encryption Form injected into `/storages/{uuid}`
 
 ## Critical Architecture Knowledge
 
@@ -27,17 +32,18 @@ This is a **Laravel package** that extends Coolify v4 with granular user role an
 
 Laravel boots **package providers BEFORE application providers**. This means:
 
-1. Our `CoolifyPermissionsServiceProvider::boot()` runs FIRST
+1. Our `CoolifyEnhancedServiceProvider::boot()` runs FIRST
 2. Coolify's `AuthServiceProvider::boot()` runs AFTER us
 3. Coolify's `$policies` property calls `Gate::policy()` internally, **overwriting** our policies
 
 **Solution:** Defer policy registration using `$this->app->booted()`:
 
 ```php
-// In CoolifyPermissionsServiceProvider::boot()
+// In CoolifyEnhancedServiceProvider::boot()
 $this->app->booted(function () {
     $this->registerPolicies();    // Runs AFTER Coolify's AuthServiceProvider
     $this->registerUserMacros();
+    $this->extendS3StorageModel();
 });
 ```
 
@@ -118,24 +124,25 @@ These patterns are used by `resolveProjectFromRequest()` and `resolveEnvironment
 
 ## Code Organization
 
-### Service Provider (`CoolifyPermissionsServiceProvider.php`)
+### Service Provider (`CoolifyEnhancedServiceProvider.php`)
 
 The main entry point that:
 - Loads package configuration, migrations, and views
-- Loads API routes (web routes removed in favor of middleware injection)
-- Registers the `AccessMatrix` Livewire component
+- Loads API routes (web UI is injected via middleware)
+- Registers Livewire components (`enhanced::access-matrix`, `enhanced::storage-encryption-form`)
 - Registers `InjectPermissionsUI` middleware for UI injection
 - Registers Eloquent global scopes for filtering projects/environments
-- **Defers** policy registration and User macros to `$this->app->booted()` callback
+- **Defers** policy registration, User macros, and S3 model extension to `$this->app->booted()` callback
 
 **Key methods:**
 - `register()` - Merges config
 - `boot()` - Loads all package resources, sets up booted callback
-- `registerLivewireComponents()` - Registers `permissions::access-matrix` component
+- `registerLivewireComponents()` - Registers `enhanced::access-matrix` and `enhanced::storage-encryption-form`
 - `registerMiddleware()` - Pushes `InjectPermissionsUI` as global middleware
 - `registerScopes()` - Adds ProjectPermissionScope and EnvironmentPermissionScope
 - `registerPolicies()` - Overrides Gate policies for all resource types (called via booted callback)
 - `registerUserMacros()` - Adds `canPerform()` macro to User model (called via booted callback)
+- `extendS3StorageModel()` - Adds saving event for encryption fields (called via booted callback)
 
 ### Permission Service (`Services/PermissionService.php`)
 
@@ -171,6 +178,40 @@ canCreateInCurrentContext(User $user): bool
 checkResourceablePermission(User $user, $resourceable, string $permission): bool
 ```
 
+### Rclone Service (`Services/RcloneService.php`)
+
+Handles all rclone-related operations for encrypted S3 backups.
+
+**Key methods:**
+```php
+// Get the rclone Docker image name (configurable)
+getRcloneImage(): string
+
+// Check if a storage has encryption enabled and properly configured
+isEncryptionEnabled(?S3Storage $s3): bool
+
+// Implement rclone's password obscure algorithm in PHP
+obscurePassword(string $password): string
+
+// Generate env file content for rclone S3 + crypt remotes
+buildEnvFileContent(S3Storage $s3): string
+
+// Get the correct remote target (encrypted: or s3remote:)
+getRemoteTarget(S3Storage $s3, string $remotePath): string
+
+// Build full Docker command for encrypted upload
+buildUploadCommands(...): array
+
+// Build full Docker command for encrypted download
+buildDownloadCommands(...): array
+
+// Build full Docker command for encrypted file deletion
+buildDeleteCommands(...): array
+
+// Build cleanup commands for container and env file
+buildCleanupCommands(string $containerName): string
+```
+
 ### Models
 
 **ProjectUser** (`Models/ProjectUser.php`)
@@ -185,14 +226,23 @@ checkResourceablePermission(User $user, $resourceable, string $permission): bool
 - When absent, project-level permissions cascade down
 - Extends `Pivot` (defaults `$timestamps=false`); migration creates timestamp columns (harmless)
 
+### Traits
+
+**HasS3Encryption** (`Traits/HasS3Encryption.php`)
+- Added to S3Storage model via service provider
+- `hasEncryption()` - Check if encryption is enabled and configured
+- `hasFilenameEncryption()` - Check if filename encryption is active
+- `getEncryptionConfig()` - Get encryption config as array
+
 ### Middleware
 
 **InjectPermissionsUI** (`Http/Middleware/InjectPermissionsUI.php`)
 - Global HTTP middleware that intercepts responses
-- On `/team` and `/team/*` pages, injects the AccessMatrix Livewire component
-- Only injects for authenticated users with admin/owner roles
-- Uses `Blade::render()` to server-side render the Livewire component
-- Includes a positioning script to place the UI within the existing page structure
+- On `/team/admin` page, injects the AccessMatrix Livewire component (for admin/owner)
+- On `/storages/{uuid}` page, injects the StorageEncryptionForm Livewire component
+- Only injects for authenticated users on HTML responses
+- Uses `Blade::render()` to server-side render Livewire components
+- Includes positioning scripts to place UI within existing page structure
 
 ### Livewire Components
 
@@ -204,6 +254,28 @@ checkResourceablePermission(User $user, $resourceable, string $permission): bool
 - Environment cells show "inherited" when using project-level cascade
 - Users with owner/admin role show "bypass" (non-editable)
 - Search/filter for users
+
+**StorageEncryptionForm** (`Livewire/StorageEncryptionForm.php`)
+- Per-storage encryption settings component
+- Enable/disable toggle, password fields, filename encryption dropdown
+- Directory name encryption toggle (disabled when filename encryption is off)
+- Warning about password loss
+- Saves settings to S3Storage model
+
+### Overlay Files (Overrides)
+
+Modified Coolify files that are copied over originals in the Docker image:
+
+**DatabaseBackupJob** (`Overrides/Jobs/DatabaseBackupJob.php`)
+- Branches `upload_to_s3()` into encrypted (rclone) vs unencrypted (mc) paths
+- Tracks `is_encrypted` on backup execution record
+
+**Import** (`Overrides/Livewire/Project/Database/Import.php`)
+- Handles encrypted restore via rclone download
+- Detects encryption status and routes through appropriate path
+
+**databases.php** (`Overrides/Helpers/databases.php`)
+- Modified `deleteBackupsS3()` to use rclone when filename encryption is enabled
 
 ### Policies
 
@@ -388,14 +460,14 @@ Menu-driven setup script that also supports CLI arguments for automation:
 
 **Interactive mode** (no args): Displays a menu with options:
 1. Install Coolify from official repository (fresh server setup)
-2. Install Granular Permissions addon (requires Coolify)
-3. Uninstall Granular Permissions addon (delegates to `uninstall.sh`)
+2. Install Enhanced addon (requires Coolify)
+3. Uninstall Enhanced addon (delegates to `uninstall.sh`)
 4. Check installation status
 5. Full setup (Coolify + addon in sequence)
 
 **CLI mode** (with args):
 - `--install-coolify` - Downloads and runs the official Coolify installer
-- `--install-addon` - Installs the permissions addon (GHCR or `--local`)
+- `--install-addon` - Installs the enhanced addon (GHCR or `--local`)
 - `--uninstall` - Uninstalls the addon
 - `--status` - Shows system/Coolify/addon status
 - `--local` - Build image locally instead of pulling from GHCR
@@ -407,7 +479,7 @@ The addon install action:
 2. Detects Coolify installation at `/data/coolify/source/`
 3. Supports both GHCR image pull and local build
 4. Creates `docker-compose.custom.yml` (Coolify natively supports this file)
-5. Sets `COOLIFY_GRANULAR_PERMISSIONS=true` in `.env`
+5. Sets `COOLIFY_ENHANCED=true` in `.env`
 6. Restarts Coolify via `upgrade.sh`
 7. Verifies installation
 
@@ -423,43 +495,19 @@ Automated uninstaller that:
 
 The Dockerfile:
 1. Starts FROM official Coolify image
-2. Copies package files to `/tmp/coolify-granular-permissions`
+2. Copies package files to `/tmp/coolify-enhanced`
 3. Configures composer to use local path repository
 4. Installs package via composer
-5. Runs composer dump-autoload
+5. Overlays modified Coolify files (DatabaseBackupJob, Import, databases.php)
 6. Sets up s6-overlay for migrations
-
-## Common Pitfalls & Lessons Learned
-
-1. **Boot order kills policies** — Our policies registered in `boot()` were silently overwritten by Coolify's `AuthServiceProvider`. Always use `$this->app->booted()`.
-2. **`create()` receives no model** — Laravel's `create()` policy method only gets the User. Must resolve project/environment from request URL.
-3. **Sub-resources need explicit overrides** — Coolify's EnvironmentVariable policy returns `true` for everything. We must register our own override.
-4. **All database types must be registered** — Easy to forget StandaloneKeydb, StandaloneDragonfly, StandaloneClickhouse when listing database policies.
-5. **Use static PermissionService methods in policies** — Don't call `$user->canPerform()` macro in policies. The macro may not be registered yet. Use `PermissionService::canPerform()` directly.
-6. **Environment overrides checked first** — `hasEnvironmentPermission()` checks environment_user FIRST, then falls back to project_user. This is intentional: a user with full_access at project level can be restricted to view_only on a specific environment.
-7. **`EnvironmentVariable` uses polymorphic `resourceable()`** — morphTo relationship to parent Application/Service/Database. Must traverse to find the environment.
-8. **No database changes needed for permission fixes** — The `project_user` and `environment_user` tables store permissions correctly. Issues are always in the code logic, not the data.
-9. **Coolify has no `Gate::before()` callback** — Don't assume one exists. All authorization goes through policies.
-10. **`Pivot` model defaults** — `EnvironmentUser` extends `Pivot` which sets `$timestamps = false` by default, but migration creates timestamp columns. This is harmless.
-
-## Coolify Source Reference
-
-The Coolify source code is cloned at `docs/coolify-source/` (gitignored). Key reference files:
-
-| File | What to check |
-|------|---------------|
-| `app/Providers/AuthServiceProvider.php` | All registered policies and gates |
-| `app/Policies/` | Default policy implementations (all return true) |
-| `resources/views/` | Blade templates using `canGate`, `@can` directives |
-| `app/Livewire/` | Components using `$this->authorize()` |
-| `app/Models/` | Model relationships and structure |
+7. Runs composer dump-autoload
 
 ## Common Tasks
 
 ### Grant user access to project
 
 ```php
-use AmirhMoradi\CoolifyPermissions\Services\PermissionService;
+use AmirhMoradi\CoolifyEnhanced\Services\PermissionService;
 
 PermissionService::grantProjectAccess($user, $project, 'deploy');
 ```
@@ -467,7 +515,7 @@ PermissionService::grantProjectAccess($user, $project, 'deploy');
 ### Check permission programmatically
 
 ```php
-use AmirhMoradi\CoolifyPermissions\Services\PermissionService;
+use AmirhMoradi\CoolifyEnhanced\Services\PermissionService;
 
 if (PermissionService::canPerform($user, 'deploy', $application)) {
     // Allow deployment
@@ -477,7 +525,7 @@ if (PermissionService::canPerform($user, 'deploy', $application)) {
 ### Override environment permissions
 
 ```php
-use AmirhMoradi\CoolifyPermissions\Services\PermissionService;
+use AmirhMoradi\CoolifyEnhanced\Services\PermissionService;
 
 PermissionService::grantEnvironmentAccess($user, $environment, 'view_only');
 ```
@@ -486,8 +534,8 @@ PermissionService::grantEnvironmentAccess($user, $environment, 'view_only');
 
 ### Permissions not being enforced
 
-1. Check feature flag: `config('coolify-permissions.enabled')` should be `true`
-2. Verify environment variable: `COOLIFY_GRANULAR_PERMISSIONS=true`
+1. Check feature flag: `config('coolify-enhanced.enabled')` should be `true`
+2. Verify environment variable: `COOLIFY_ENHANCED=true`
 3. Check user's team role (owner/admin bypasses all checks)
 4. Verify policies are registered: check `Gate::getPolicyFor(Application::class)` returns our policy class
 5. Check boot order: ensure `$this->app->booted()` is used for policy registration
@@ -501,7 +549,7 @@ PermissionService::grantEnvironmentAccess($user, $environment, 'view_only');
 ### Migrations not running
 
 1. Check s6 service logs: `cat /var/log/s6-rc/addon-migration/current`
-2. Run manually: `php artisan migrate --path=vendor/amirhmoradi/coolify-granular-permissions/database/migrations`
+2. Run manually: `php artisan migrate --path=vendor/amirhmoradi/coolify-enhanced/database/migrations`
 
 ### Access Matrix not showing
 
@@ -509,6 +557,45 @@ PermissionService::grantEnvironmentAccess($user, $environment, 'view_only');
 2. Clear view cache: `php artisan view:clear`
 3. Check container logs for middleware errors
 4. Verify you are on the `/team/admin` or `/team` page
+
+### Encryption form not showing
+
+1. Navigate to a storage detail page (`/storages/{uuid}`)
+2. Check that the InjectPermissionsUI middleware is registered
+3. Check that `storage.show` route name matches
+4. Look for JavaScript errors in browser console
+
+## Common Pitfalls & Lessons Learned
+
+1. **Boot order kills policies** — Our policies registered in `boot()` were silently overwritten by Coolify's `AuthServiceProvider`. Always use `$this->app->booted()`.
+2. **`create()` receives no model** — Laravel's `create()` policy method only gets the User. Must resolve project/environment from request URL.
+3. **Sub-resources need explicit overrides** — Coolify's EnvironmentVariable policy returns `true` for everything. We must register our own override.
+4. **All database types must be registered** — Easy to forget StandaloneKeydb, StandaloneDragonfly, StandaloneClickhouse when listing database policies.
+5. **Use static PermissionService methods in policies** — Don't call `$user->canPerform()` macro in policies. The macro may not be registered yet. Use `PermissionService::canPerform()` directly.
+6. **Environment overrides checked first** — `hasEnvironmentPermission()` checks environment_user FIRST, then falls back to project_user. This is intentional: a user with full_access at project level can be restricted to view_only on a specific environment.
+7. **`EnvironmentVariable` uses polymorphic `resourceable()`** — morphTo relationship to parent Application/Service/Database. Must traverse to find the environment.
+8. **No database changes needed for permission fixes** — The `project_user` and `environment_user` tables store permissions correctly. Issues are always in the code logic, not the data.
+9. **Coolify has no `Gate::before()` callback** — Don't assume one exists. All authorization goes through policies.
+10. **`Pivot` model defaults** — `EnvironmentUser` extends `Pivot` which sets `$timestamps = false` by default, but migration creates timestamp columns. This is harmless.
+11. **Rclone password obscuring** — Uses AES-256-CTR with a well-known fixed key from rclone's source. The PHP implementation must produce exactly the same output as `rclone obscure`.
+12. **Env file for rclone credentials** — Base64-encoded env file written to server, passed via `--env-file` to Docker. Must be cleaned up after use to avoid credential leaks.
+13. **Filename encryption breaks S3 listing** — When `filename_encryption != 'off'`, files on S3 have encrypted names. Cannot use Laravel Storage driver for listing/deleting; must use rclone.
+
+## Coolify Source Reference
+
+The Coolify source code is cloned at `docs/coolify-source/` (gitignored). Key reference files:
+
+| File | What to check |
+|------|---------------|
+| `app/Providers/AuthServiceProvider.php` | All registered policies and gates |
+| `app/Policies/` | Default policy implementations (all return true) |
+| `resources/views/` | Blade templates using `canGate`, `@can` directives |
+| `app/Livewire/` | Components using `$this->authorize()` |
+| `app/Models/` | Model relationships and structure |
+| `app/Jobs/DatabaseBackupJob.php` | Backup job with `upload_to_s3()` method |
+| `app/Livewire/Project/Database/Import.php` | Restore component with `restoreFromS3()` |
+| `bootstrap/helpers/databases.php` | Helper functions including `deleteBackupsS3()` |
+| `app/Models/S3Storage.php` | S3 storage model with encrypted casts |
 
 ## Version Compatibility
 

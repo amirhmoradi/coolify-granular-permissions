@@ -1,9 +1,9 @@
 <?php
 
-namespace AmirhMoradi\CoolifyPermissions\Http\Controllers\Api;
+namespace AmirhMoradi\CoolifyEnhanced\Http\Controllers\Api;
 
-use AmirhMoradi\CoolifyPermissions\Models\ProjectUser;
-use AmirhMoradi\CoolifyPermissions\Services\PermissionService;
+use AmirhMoradi\CoolifyEnhanced\Models\ProjectUser;
+use AmirhMoradi\CoolifyEnhanced\Services\PermissionService;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Models\User;

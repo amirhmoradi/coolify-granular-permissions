@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # =============================================================================
-# Coolify Granular Permissions - Uninstaller
+# Coolify Enhanced - Uninstaller
 # =============================================================================
-# Removes the granular permissions addon from a running Coolify v4 instance.
+# Removes the enhanced addon from a running Coolify v4 instance.
 # Optionally cleans up database tables.
 #
 # Usage:
@@ -88,11 +88,11 @@ success "Coolify directory found"
 # --- Confirmation ---
 
 echo ""
-echo -e "${YELLOW}This will uninstall the Coolify Granular Permissions addon.${NC}"
+echo -e "${YELLOW}This will uninstall the Coolify Enhanced addon.${NC}"
 echo ""
 echo "What will happen:"
 echo "  - docker-compose.custom.yml will be removed (backed up first)"
-echo "  - COOLIFY_GRANULAR_PERMISSIONS env var will be removed"
+echo "  - COOLIFY_ENHANCED env var will be removed"
 echo "  - Coolify will be restarted with the original image"
 echo "  - All projects, users, and deployments remain intact"
 echo ""
@@ -130,7 +130,7 @@ if [ "$DB_ACTION" = "clean" ]; then
 
     # Try to run rollback via artisan first (if the custom image is still running)
     if docker exec coolify php artisan migrate:rollback \
-        --path=vendor/amirhmoradi/coolify-granular-permissions/database/migrations \
+        --path=vendor/amirhmoradi/coolify-enhanced/database/migrations \
         --force 2>/dev/null; then
         success "Migrations rolled back via artisan"
     else
@@ -198,11 +198,11 @@ fi
 step "Cleaning environment variables..."
 
 if [ -f "$ENV_FILE" ]; then
-    if grep -q "COOLIFY_GRANULAR_PERMISSIONS" "$ENV_FILE"; then
-        sed -i '/COOLIFY_GRANULAR_PERMISSIONS/d' "$ENV_FILE"
-        success "Removed COOLIFY_GRANULAR_PERMISSIONS from .env"
+    if grep -q "COOLIFY_ENHANCED" "$ENV_FILE"; then
+        sed -i '/COOLIFY_ENHANCED/d' "$ENV_FILE"
+        success "Removed COOLIFY_ENHANCED from .env"
     else
-        info "COOLIFY_GRANULAR_PERMISSIONS not found in .env (already removed)"
+        info "COOLIFY_ENHANCED not found in .env (already removed)"
     fi
 else
     info "No .env file found"
@@ -256,10 +256,10 @@ info "Running image: ${RUNNING_IMAGE}"
 
 # --- Clean up local Docker image (optional) ---
 
-if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "coolify-granular-permissions"; then
+if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "coolify-enhanced"; then
     echo ""
-    if confirm "Remove local granular-permissions Docker images?"; then
-        docker images --format '{{.Repository}}:{{.Tag}}' | grep "coolify-granular-permissions" | while read -r img; do
+    if confirm "Remove local enhanced Docker images?"; then
+        docker images --format '{{.Repository}}:{{.Tag}}' | grep "coolify-enhanced" | while read -r img; do
             docker rmi "$img" 2>/dev/null && info "Removed image: $img" || true
         done
         success "Local images cleaned up"
@@ -277,7 +277,7 @@ echo -e "${GREEN}============================================${NC}"
 echo ""
 echo "What was done:"
 echo "  - Removed docker-compose.custom.yml (backup saved)"
-echo "  - Removed COOLIFY_GRANULAR_PERMISSIONS from .env"
+echo "  - Removed COOLIFY_ENHANCED from .env"
 if [ "$DB_ACTION" = "clean" ]; then
     echo "  - Cleaned up database tables"
 else

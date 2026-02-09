@@ -1,8 +1,8 @@
 <?php
 
-namespace AmirhMoradi\CoolifyPermissions\Policies;
+namespace AmirhMoradi\CoolifyEnhanced\Policies;
 
-use AmirhMoradi\CoolifyPermissions\Services\PermissionService;
+use AmirhMoradi\CoolifyEnhanced\Services\PermissionService;
 use App\Models\Application;
 use App\Models\User;
 

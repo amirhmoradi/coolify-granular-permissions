@@ -1,11 +1,11 @@
 # =================================================================
 # Docker Image Build & Publish to GHCR
 # =================================================================
-# This workflow builds the Coolify with Granular Permissions image
+# This workflow builds the Coolify Enhanced image
 # and publishes it to GitHub Container Registry (ghcr.io)
 #
 # Users can pull the image using:
-#   docker pull ghcr.io/<owner>/coolify-granular-permissions:latest
+#   docker pull ghcr.io/<owner>/coolify-enhanced:latest
 # =================================================================
 
 name: Build and Publish Docker Image
@@ -107,8 +107,8 @@ jobs:
             # SHA-based tag for traceability
             type=sha,prefix=sha-
           labels: |
-            org.opencontainers.image.title=Coolify with Granular Permissions
-            org.opencontainers.image.description=Extends Coolify v4 with granular user role and project-level access management
+            org.opencontainers.image.title=Coolify Enhanced
+            org.opencontainers.image.description=Extends Coolify v4 with enhanced user role and project-level access management
             org.opencontainers.image.vendor=${{ github.repository_owner }}
             dev.coolify.base-version=${{ steps.coolify-version.outputs.version }}
 
@@ -210,8 +210,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.release.outputs.version }}-coolify-${{ matrix.coolify_version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:coolify-${{ matrix.coolify_version }}
           labels: |
-            org.opencontainers.image.title=Coolify with Granular Permissions
-            org.opencontainers.image.description=Extends Coolify v4 with granular user role and project-level access management
+            org.opencontainers.image.title=Coolify Enhanced
+            org.opencontainers.image.description=Extends Coolify v4 with enhanced user role and project-level access management
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
             dev.coolify.base-version=${{ matrix.coolify_version }}
           build-args: |

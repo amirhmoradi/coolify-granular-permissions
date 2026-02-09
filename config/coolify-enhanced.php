@@ -11,7 +11,7 @@ return [
     | team members have access to all projects (default Coolify behavior).
     |
     */
-    'enabled' => env('COOLIFY_GRANULAR_PERMISSIONS', false),
+    'enabled' => env('COOLIFY_ENHANCED', env('COOLIFY_GRANULAR_PERMISSIONS', false)),
 
     /*
     |--------------------------------------------------------------------------
@@ -85,4 +85,18 @@ return [
     |
     */
     'default_level' => 'view_only',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Backup Encryption
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for the S3 backup encryption feature.
+    | Uses rclone's crypt backend (NaCl SecretBox) for at-rest encryption.
+    |
+    */
+    'backup_encryption' => [
+        // The rclone Docker image used for encrypted backup operations
+        'rclone_image' => env('COOLIFY_RCLONE_IMAGE', 'rclone/rclone:latest'),
+    ],
 ];

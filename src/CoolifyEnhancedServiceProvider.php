@@ -1,24 +1,24 @@
 <?php
 
-namespace AmirhMoradi\CoolifyPermissions;
+namespace AmirhMoradi\CoolifyEnhanced;
 
-use AmirhMoradi\CoolifyPermissions\Http\Middleware\InjectPermissionsUI;
-use AmirhMoradi\CoolifyPermissions\Scopes\EnvironmentPermissionScope;
-use AmirhMoradi\CoolifyPermissions\Scopes\ProjectPermissionScope;
-use AmirhMoradi\CoolifyPermissions\Services\PermissionService;
+use AmirhMoradi\CoolifyEnhanced\Http\Middleware\InjectPermissionsUI;
+use AmirhMoradi\CoolifyEnhanced\Scopes\EnvironmentPermissionScope;
+use AmirhMoradi\CoolifyEnhanced\Scopes\ProjectPermissionScope;
+use AmirhMoradi\CoolifyEnhanced\Services\PermissionService;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
 
-class CoolifyPermissionsServiceProvider extends ServiceProvider
+class CoolifyEnhancedServiceProvider extends ServiceProvider
 {
     /**
      * Register any application services.
      */
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/../config/coolify-permissions.php', 'coolify-permissions');
+        $this->mergeConfigFrom(__DIR__.'/../config/coolify-enhanced.php', 'coolify-enhanced');
     }
 
     /**
@@ -27,12 +27,12 @@ class CoolifyPermissionsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Only load if feature is enabled
-        if (! config('coolify-permissions.enabled', false)) {
+        if (! config('coolify-enhanced.enabled', false)) {
             return;
         }
 
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
-        $this->loadViewsFrom(__DIR__.'/../resources/views', 'coolify-permissions');
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'coolify-enhanced');
 
         // Load API routes only (web UI is injected via middleware)
         $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
@@ -45,13 +45,13 @@ class CoolifyPermissionsServiceProvider extends ServiceProvider
 
         // Publish configuration
         $this->publishes([
-            __DIR__.'/../config/coolify-permissions.php' => config_path('coolify-permissions.php'),
-        ], 'coolify-permissions-config');
+            __DIR__.'/../config/coolify-enhanced.php' => config_path('coolify-enhanced.php'),
+        ], 'coolify-enhanced-config');
 
         // Publish views for customization
         $this->publishes([
-            __DIR__.'/../resources/views' => resource_path('views/vendor/coolify-permissions'),
-        ], 'coolify-permissions-views');
+            __DIR__.'/../resources/views' => resource_path('views/vendor/coolify-enhanced'),
+        ], 'coolify-enhanced-views');
 
         // Register global scopes to filter resources based on permissions
         $this->registerScopes();
@@ -71,6 +71,7 @@ class CoolifyPermissionsServiceProvider extends ServiceProvider
         $this->app->booted(function () {
             $this->registerPolicies();
             $this->registerUserMacros();
+            $this->extendS3StorageModel();
         });
     }
 
@@ -80,8 +81,13 @@ class CoolifyPermissionsServiceProvider extends ServiceProvider
     protected function registerLivewireComponents(): void
     {
         Livewire::component(
-            'permissions::access-matrix',
-            \AmirhMoradi\CoolifyPermissions\Livewire\AccessMatrix::class
+            'enhanced::access-matrix',
+            \AmirhMoradi\CoolifyEnhanced\Livewire\AccessMatrix::class
+        );
+
+        Livewire::component(
+            'enhanced::storage-encryption-form',
+            \AmirhMoradi\CoolifyEnhanced\Livewire\StorageEncryptionForm::class
         );
     }
 
@@ -119,24 +125,24 @@ class CoolifyPermissionsServiceProvider extends ServiceProvider
     {
         $policies = [
             // Core resource policies
-            \App\Models\Application::class => \AmirhMoradi\CoolifyPermissions\Policies\ApplicationPolicy::class,
-            \App\Models\Project::class => \AmirhMoradi\CoolifyPermissions\Policies\ProjectPolicy::class,
-            \App\Models\Environment::class => \AmirhMoradi\CoolifyPermissions\Policies\EnvironmentPolicy::class,
-            \App\Models\Server::class => \AmirhMoradi\CoolifyPermissions\Policies\ServerPolicy::class,
-            \App\Models\Service::class => \AmirhMoradi\CoolifyPermissions\Policies\ServicePolicy::class,
+            \App\Models\Application::class => \AmirhMoradi\CoolifyEnhanced\Policies\ApplicationPolicy::class,
+            \App\Models\Project::class => \AmirhMoradi\CoolifyEnhanced\Policies\ProjectPolicy::class,
+            \App\Models\Environment::class => \AmirhMoradi\CoolifyEnhanced\Policies\EnvironmentPolicy::class,
+            \App\Models\Server::class => \AmirhMoradi\CoolifyEnhanced\Policies\ServerPolicy::class,
+            \App\Models\Service::class => \AmirhMoradi\CoolifyEnhanced\Policies\ServicePolicy::class,
 
             // Database policies (all types)
-            \App\Models\StandalonePostgresql::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
-            \App\Models\StandaloneMysql::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
-            \App\Models\StandaloneMariadb::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
-            \App\Models\StandaloneMongodb::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
-            \App\Models\StandaloneRedis::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
-            \App\Models\StandaloneKeydb::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
-            \App\Models\StandaloneDragonfly::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
-            \App\Models\StandaloneClickhouse::class => \AmirhMoradi\CoolifyPermissions\Policies\DatabasePolicy::class,
+            \App\Models\StandalonePostgresql::class => \AmirhMoradi\CoolifyEnhanced\Policies\DatabasePolicy::class,
+            \App\Models\StandaloneMysql::class => \AmirhMoradi\CoolifyEnhanced\Policies\DatabasePolicy::class,
+            \App\Models\StandaloneMariadb::class => \AmirhMoradi\CoolifyEnhanced\Policies\DatabasePolicy::class,
+            \App\Models\StandaloneMongodb::class => \AmirhMoradi\CoolifyEnhanced\Policies\DatabasePolicy::class,
+            \App\Models\StandaloneRedis::class => \AmirhMoradi\CoolifyEnhanced\Policies\DatabasePolicy::class,
+            \App\Models\StandaloneKeydb::class => \AmirhMoradi\CoolifyEnhanced\Policies\DatabasePolicy::class,
+            \App\Models\StandaloneDragonfly::class => \AmirhMoradi\CoolifyEnhanced\Policies\DatabasePolicy::class,
+            \App\Models\StandaloneClickhouse::class => \AmirhMoradi\CoolifyEnhanced\Policies\DatabasePolicy::class,
 
             // Sub-resource policies (Coolify's defaults return true for everything)
-            \App\Models\EnvironmentVariable::class => \AmirhMoradi\CoolifyPermissions\Policies\EnvironmentVariablePolicy::class,
+            \App\Models\EnvironmentVariable::class => \AmirhMoradi\CoolifyEnhanced\Policies\EnvironmentVariablePolicy::class,
         ];
 
         foreach ($policies as $model => $policy) {
@@ -144,6 +150,36 @@ class CoolifyPermissionsServiceProvider extends ServiceProvider
                 Gate::policy($model, $policy);
             }
         }
+    }
+
+    /**
+     * Extend the S3Storage model with encryption support.
+     *
+     * Adds encrypted casts for encryption_password and encryption_salt columns
+     * so they are stored encrypted at rest in the database (like key/secret).
+     */
+    protected function extendS3StorageModel(): void
+    {
+        if (! class_exists(\App\Models\S3Storage::class)) {
+            return;
+        }
+
+        // Add encrypted casts for the new encryption fields
+        // S3Storage already uses 'encrypted' cast for key and secret
+        \App\Models\S3Storage::resolveRelationUsing('_enhancedInit', function ($model) {
+            return null;
+        });
+
+        // Use the saving event to ensure encryption fields are properly handled
+        \App\Models\S3Storage::saving(function (\App\Models\S3Storage $storage) {
+            // Trim encryption password whitespace (same pattern as key/secret)
+            if ($storage->encryption_password !== null) {
+                $storage->encryption_password = trim($storage->encryption_password);
+            }
+            if ($storage->encryption_salt !== null) {
+                $storage->encryption_salt = trim($storage->encryption_salt);
+            }
+        });
     }
 
     /**

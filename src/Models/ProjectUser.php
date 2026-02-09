@@ -1,6 +1,6 @@
 <?php
 
-namespace AmirhMoradi\CoolifyPermissions\Models;
+namespace AmirhMoradi\CoolifyEnhanced\Models;
 
 use App\Models\Project;
 use App\Models\User;

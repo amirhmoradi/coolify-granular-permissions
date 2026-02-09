@@ -7,6 +7,6 @@ foreground {
     php
     artisan
     migrate
-    --path=vendor/amirhmoradi/coolify-granular-permissions/database/migrations
+    --path=vendor/amirhmoradi/coolify-enhanced/database/migrations
     --force
 }
