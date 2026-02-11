@@ -48,10 +48,33 @@ class ResourceBackupJob implements ShouldBeEncrypted, ShouldQueue
 
     public function handle(): void
     {
+        // Safety: if the feature was disabled while this job was queued, exit silently
+        if (! config('coolify-enhanced.enabled', false)) {
+            Log::info('ResourceBackup: Feature disabled, skipping backup '.$this->backup->uuid);
+
+            return;
+        }
+
         try {
             $this->team = Team::find($this->backup->team_id);
             if (! $this->team) {
                 $this->backup->delete();
+
+                return;
+            }
+
+            $this->s3 = $this->backup->s3;
+            $backupType = $this->backup->backup_type;
+
+            // Coolify instance backup doesn't need a resource or server resolved via resource chain
+            if ($backupType === ScheduledResourceBackup::TYPE_COOLIFY_INSTANCE) {
+                $this->server = $this->resolveCoolifyServer();
+                if (! $this->server) {
+                    throw new \Exception('Could not resolve the Coolify server for instance backup');
+                }
+                $this->backup_dir = backup_dir().'/coolify-instance/'.str($this->team->name)->slug().'-'.$this->team->id;
+                $this->backupCoolifyInstance();
+                $this->removeOldBackups();
 
                 return;
             }
@@ -61,7 +84,6 @@ class ResourceBackupJob implements ShouldBeEncrypted, ShouldQueue
                 throw new \Exception('Server not found for resource backup');
             }
 
-            $this->s3 = $this->backup->s3;
             $resource = $this->backup->resource;
             if (! $resource) {
                 throw new \Exception('Resource not found for backup');
@@ -70,8 +92,6 @@ class ResourceBackupJob implements ShouldBeEncrypted, ShouldQueue
             $resourceName = str(data_get($resource, 'name', 'unknown'))->slug()->value();
             $resourceUuid = data_get($resource, 'uuid', 'unknown');
             $this->backup_dir = backup_dir().'/resources/'.str($this->team->name)->slug().'-'.$this->team->id.'/'.$resourceName.'-'.$resourceUuid;
-
-            $backupType = $this->backup->backup_type;
 
             if ($backupType === ScheduledResourceBackup::TYPE_VOLUME) {
                 $this->backupVolumes();
@@ -423,6 +443,114 @@ class ResourceBackupJob implements ShouldBeEncrypted, ShouldQueue
         }
 
         return $config;
+    }
+
+    /**
+     * Backup the entire Coolify installation (/data/coolify/) as a tar.gz.
+     *
+     * Excludes the backups directory to avoid duplication, and excludes
+     * large ephemeral directories (metrics, tmp).
+     */
+    private function backupCoolifyInstance(): void
+    {
+        $baseDir = base_configuration_dir(); // /data/coolify
+        $timestamp = Carbon::now()->timestamp;
+        $backupFile = "/coolify-instance-{$timestamp}.tar.gz";
+        $backupLocation = $this->backup_dir.$backupFile;
+
+        $logUuid = $this->generateUniqueUuid();
+
+        $execution = ScheduledResourceBackupExecution::create([
+            'uuid' => $logUuid,
+            'backup_type' => 'coolify_instance',
+            'backup_label' => 'coolify-instance',
+            'filename' => $backupLocation,
+            'scheduled_resource_backup_id' => $this->backup->id,
+            'local_storage_deleted' => false,
+        ]);
+
+        try {
+            // Exclude backups (avoids backup-of-backups duplication),
+            // metrics (ephemeral monitoring data), and common temp dirs
+            $excludes = [
+                '--exclude=./backups',
+                '--exclude=./metrics',
+                '--exclude=./tmp',
+                '--exclude=./.cache',
+            ];
+            $excludeStr = implode(' ', $excludes);
+
+            $commands = [
+                "mkdir -p {$this->backup_dir}",
+                "tar czf {$backupLocation} {$excludeStr} -C {$baseDir} .",
+            ];
+
+            $output = instant_remote_process($commands, $this->server, true, false, $this->timeout, disableMultiplexing: true);
+            $size = $this->calculateSize($backupLocation);
+
+            if ($size <= 0) {
+                throw new \Exception('Coolify instance backup file is empty or was not created');
+            }
+
+            // Upload to S3 if enabled
+            $isEncrypted = false;
+            $s3UploadError = null;
+            $localStorageDeleted = false;
+
+            if ($this->backup->save_s3) {
+                try {
+                    $this->uploadToS3($backupLocation, $this->backup_dir.'/', $logUuid);
+                    $isEncrypted = RcloneService::isEncryptionEnabled($this->s3);
+
+                    if ($this->backup->disable_local_backup) {
+                        $this->deleteLocalFile($backupLocation);
+                        $localStorageDeleted = true;
+                    }
+                } catch (\Throwable $e) {
+                    $s3UploadError = $e->getMessage();
+                }
+            }
+
+            $message = $output ? trim($output) : null;
+            if ($s3UploadError) {
+                $message = ($message ? $message."\n\n" : '')."Warning: S3 upload failed: {$s3UploadError}";
+            }
+
+            $updateData = [
+                'status' => 'success',
+                'message' => $message,
+                'size' => $size,
+                's3_uploaded' => $this->backup->save_s3 ? $this->s3_uploaded : null,
+                'local_storage_deleted' => $localStorageDeleted,
+            ];
+
+            if ($this->s3_uploaded) {
+                $updateData['is_encrypted'] = $isEncrypted;
+            }
+
+            $execution->update($updateData);
+        } catch (\Throwable $e) {
+            $execution->update([
+                'status' => 'failed',
+                'message' => $e->getMessage(),
+                'size' => 0,
+                'filename' => null,
+                's3_uploaded' => null,
+                'finished_at' => Carbon::now(),
+            ]);
+        } finally {
+            $execution->update(['finished_at' => Carbon::now()]);
+            $this->s3_uploaded = false;
+        }
+    }
+
+    /**
+     * Resolve the Coolify server (the server running this Coolify instance).
+     * For instance backups, we always run on server_id=0 (localhost).
+     */
+    private function resolveCoolifyServer(): ?Server
+    {
+        return Server::find(0);
     }
 
     /**

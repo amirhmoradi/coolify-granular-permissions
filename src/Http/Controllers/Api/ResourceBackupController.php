@@ -10,6 +10,14 @@ use Visus\Cuid2\Cuid2;
 
 class ResourceBackupController extends Controller
 {
+    public function __construct()
+    {
+        // Safety: abort if the feature has been disabled
+        if (! config('coolify-enhanced.enabled', false)) {
+            abort(404);
+        }
+    }
+
     /**
      * List resource backups for the current team.
      */
@@ -30,9 +38,9 @@ class ResourceBackupController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'backup_type' => 'required|in:volume,configuration,full',
-            'resource_type' => 'required|string',
-            'resource_id' => 'required|integer',
+            'backup_type' => 'required|in:volume,configuration,full,coolify_instance',
+            'resource_type' => 'required_unless:backup_type,coolify_instance|string',
+            'resource_id' => 'required_unless:backup_type,coolify_instance|integer',
             'frequency' => 'nullable|string|max:100',
             'timezone' => 'nullable|string|max:100',
             'timeout' => 'nullable|integer|min:60',
@@ -46,6 +54,12 @@ class ResourceBackupController extends Controller
         ]);
 
         $teamId = $request->user()->currentTeam()->id;
+
+        // coolify_instance doesn't need a resource
+        if ($validated['backup_type'] === 'coolify_instance') {
+            $validated['resource_type'] = 'coolify_instance';
+            $validated['resource_id'] = 0;
+        }
 
         $backup = ScheduledResourceBackup::create(array_merge($validated, [
             'uuid' => (string) new Cuid2,

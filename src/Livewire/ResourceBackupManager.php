@@ -72,10 +72,25 @@ class ResourceBackupManager extends Component
 
     public function loadBackups(): void
     {
-        $this->backups = ScheduledResourceBackup::where('resource_id', $this->resourceId)
-            ->where('resource_type', $this->resourceType)
-            ->with('latest_log')
-            ->get()
+        $query = ScheduledResourceBackup::with('latest_log');
+
+        // Show resource-specific backups AND coolify_instance backups for this team
+        $query->where(function ($q) {
+            $q->where(function ($sub) {
+                $sub->where('resource_id', $this->resourceId)
+                    ->where('resource_type', $this->resourceType);
+            })->orWhere('backup_type', 'coolify_instance');
+        });
+
+        // Scope to current team
+        try {
+            $teamId = auth()->user()->currentTeam()->id;
+            $query->where('team_id', $teamId);
+        } catch (\Throwable $e) {
+            // Fallback: don't scope
+        }
+
+        $this->backups = $query->get()
             ->map(fn ($b) => [
                 'id' => $b->id,
                 'uuid' => $b->uuid,
@@ -107,11 +122,9 @@ class ResourceBackupManager extends Component
         try {
             $teamId = auth()->user()->currentTeam()->id;
 
-            $backup = ScheduledResourceBackup::create([
+            $data = [
                 'uuid' => (string) new Cuid2,
                 'backup_type' => $this->backupType,
-                'resource_type' => $this->resourceType,
-                'resource_id' => $this->resourceId,
                 'frequency' => $this->frequency,
                 'timezone' => $this->timezone,
                 'timeout' => $this->timeout,
@@ -124,7 +137,18 @@ class ResourceBackupManager extends Component
                 'retention_days_s3' => $this->retentionDaysS3,
                 'team_id' => $teamId,
                 'enabled' => true,
-            ]);
+            ];
+
+            // coolify_instance doesn't need a resource — it backs up /data/coolify
+            if ($this->backupType === 'coolify_instance') {
+                $data['resource_type'] = 'coolify_instance';
+                $data['resource_id'] = 0;
+            } else {
+                $data['resource_type'] = $this->resourceType;
+                $data['resource_id'] = $this->resourceId;
+            }
+
+            $backup = ScheduledResourceBackup::create($data);
 
             $this->loadBackups();
             $this->saveMessage = 'Backup schedule created.';

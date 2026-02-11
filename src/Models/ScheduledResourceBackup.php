@@ -36,10 +36,13 @@ class ScheduledResourceBackup extends Model
 
     public const TYPE_FULL = 'full';
 
+    public const TYPE_COOLIFY_INSTANCE = 'coolify_instance';
+
     public const TYPES = [
         self::TYPE_VOLUME,
         self::TYPE_CONFIGURATION,
         self::TYPE_FULL,
+        self::TYPE_COOLIFY_INSTANCE,
     ];
 
     /**
@@ -75,6 +78,11 @@ class ScheduledResourceBackup extends Model
      */
     public function server()
     {
+        // Coolify instance backups always run on the local server (id=0)
+        if ($this->backup_type === self::TYPE_COOLIFY_INSTANCE) {
+            return \App\Models\Server::find(0);
+        }
+
         $resource = $this->resource;
         if (! $resource) {
             return null;

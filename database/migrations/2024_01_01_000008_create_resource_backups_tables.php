@@ -5,10 +5,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Create tables for resource backups (volumes, configuration, full).
+ * Create tables for resource backups (volumes, configuration, full, coolify instance).
  *
  * This extends Coolify's backup system beyond databases to support
- * backing up Docker volumes, resource configuration, and full backups.
+ * backing up Docker volumes, resource configuration, full backups,
+ * and the entire Coolify installation.
  */
 return new class extends Migration
 {
@@ -21,12 +22,13 @@ return new class extends Migration
                 $table->text('description')->nullable();
                 $table->boolean('enabled')->default(true);
 
-                // Backup type: 'volume', 'configuration', 'full'
+                // Backup type: 'volume', 'configuration', 'full', 'coolify_instance'
                 $table->string('backup_type')->default('volume');
 
                 // Polymorphic: Application, Service, or standalone Database
-                $table->string('resource_type');
-                $table->unsignedBigInteger('resource_id');
+                // Nullable for coolify_instance backups (no specific resource)
+                $table->string('resource_type')->default('');
+                $table->unsignedBigInteger('resource_id')->default(0);
 
                 // S3 storage settings
                 $table->boolean('save_s3')->default(true);

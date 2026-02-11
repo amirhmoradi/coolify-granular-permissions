@@ -92,7 +92,7 @@ The encryption feature uses rclone's crypt backend (NaCl SecretBox) to transpare
 Extends Coolify's database-only backups to support Docker volumes, configuration, and full backups for any resource:
 
 - **Separate model/table**: `ScheduledResourceBackup` and `ScheduledResourceBackupExecution` — parallel to Coolify's `ScheduledDatabaseBackup`
-- **Backup types**: `volume` (tar.gz Docker volumes), `configuration` (JSON export of settings, env vars, compose), `full` (both)
+- **Backup types**: `volume` (tar.gz Docker volumes), `configuration` (JSON export of settings, env vars, compose), `full` (both), `coolify_instance` (full `/data/coolify` installation minus backups)
 - **Volume backup approach**: Uses `docker inspect` to discover mounts, then `tar czf` via helper Alpine container for named volumes or direct tar for bind mounts
 - **Configuration export**: Serializes resource model, environment variables, persistent storages, docker-compose, custom labels to JSON
 - **Same S3 infrastructure**: Reuses `RcloneService` for encrypted uploads; uses mc for unencrypted uploads (same pattern as database backups)
@@ -269,6 +269,8 @@ Two approaches are used to add UI components to Coolify pages:
 15. **Volume backup uses helper Alpine container** — For Docker named volumes, use `docker run --rm -v volume:/source:ro alpine tar czf` rather than attempting to access `/var/lib/docker/volumes` directly.
 16. **Resource backup scheduling** — Uses `$app->booted()` to register a scheduler callback that checks cron expressions every minute via `CronExpression::isDue()`.
 17. **Resource backup directory layout** — Uses `/data/coolify/backups/resources/` (not `/databases/`) to avoid conflicts with Coolify's native database backup paths.
+18. **Coolify instance backup excludes backups/** — `backupCoolifyInstance()` uses `--exclude=./backups --exclude=./metrics` to prevent backup-of-backups duplication.
+19. **Feature flag safety** — `ResourceBackupJob::handle()` checks `config('coolify-enhanced.enabled')` at runtime so queued jobs exit silently if the feature is disabled. API controller also guards in constructor.
 
 ## Important Notes
 

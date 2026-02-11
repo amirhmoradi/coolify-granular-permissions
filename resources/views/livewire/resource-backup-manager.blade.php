@@ -3,7 +3,7 @@
         <div>
             <h2>Resource Backups</h2>
             <div class="subtitle">
-                Back up Docker volumes, resource configuration, or everything for {{ $resourceName ?? 'this resource' }}.
+                Back up Docker volumes, resource configuration, the full Coolify installation, or everything for {{ $resourceName ?? 'this resource' }}.
             </div>
         </div>
 
@@ -17,10 +17,20 @@
                             {{ $selectedBackupId === $backup['id'] ? 'border-warning' : '' }}"
                             wire:click="selectBackup({{ $backup['id'] }})">
                             <div class="flex items-center gap-3">
-                                <span class="px-2 py-0.5 text-xs rounded
-                                    {{ $backup['backup_type'] === 'full' ? 'bg-purple-500/20 text-purple-400' :
-                                       ($backup['backup_type'] === 'volume' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400') }}">
-                                    {{ ucfirst($backup['backup_type']) }}
+                                @php
+                                    $typeColors = match($backup['backup_type']) {
+                                        'full' => 'bg-purple-500/20 text-purple-400',
+                                        'volume' => 'bg-blue-500/20 text-blue-400',
+                                        'coolify_instance' => 'bg-orange-500/20 text-orange-400',
+                                        default => 'bg-green-500/20 text-green-400',
+                                    };
+                                    $typeLabel = match($backup['backup_type']) {
+                                        'coolify_instance' => 'Instance',
+                                        default => ucfirst($backup['backup_type']),
+                                    };
+                                @endphp
+                                <span class="px-2 py-0.5 text-xs rounded {{ $typeColors }}">
+                                    {{ $typeLabel }}
                                 </span>
                                 <span class="text-sm">{{ $backup['frequency'] }}</span>
                                 <span class="text-xs opacity-60">Last: {{ $backup['latest_at'] }}</span>
@@ -70,7 +80,9 @@
                         <tbody>
                             @foreach($executions as $exec)
                                 <tr class="border-b dark:border-coolgray-300/50">
-                                    <td class="p-2">{{ ucfirst($exec['backup_type']) }}</td>
+                                    <td class="p-2">
+                                        {{ $exec['backup_type'] === 'coolify_instance' ? 'Instance' : ucfirst($exec['backup_type']) }}
+                                    </td>
                                     <td class="p-2 text-xs opacity-80">{{ $exec['backup_label'] ?? '-' }}</td>
                                     <td class="p-2">
                                         <span class="{{ $exec['status'] === 'success' ? 'text-success' : ($exec['status'] === 'failed' ? 'text-error' : 'text-warning') }}">
@@ -105,6 +117,7 @@
                     <option value="volume">Volume — Docker volume snapshots (tar.gz)</option>
                     <option value="configuration">Configuration — Settings, env vars, compose files (JSON)</option>
                     <option value="full">Full — Volumes + Configuration</option>
+                    <option value="coolify_instance">Coolify Instance — Full /data/coolify installation backup</option>
                 </x-forms.select>
 
                 <x-forms.input
@@ -114,6 +127,19 @@
                     helper="Cron expression. Default: daily at 2 AM."
                 />
             </div>
+
+            @if($backupType === 'coolify_instance')
+                <div class="flex items-start gap-2 p-3 rounded-md text-sm opacity-80">
+                    <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd"/>
+                    </svg>
+                    <div>
+                        Backs up <code>/data/coolify</code> (source, SSH keys, application/service/database configs).
+                        <strong>Excludes</strong> <code>/data/coolify/backups</code> and <code>/data/coolify/metrics</code>
+                        to avoid duplicating existing backups. Database data should be backed up separately using Coolify's built-in database backup feature.
+                    </div>
+                </div>
+            @endif
 
             <div class="grid grid-cols-2 gap-2">
                 <x-forms.input
