@@ -43,10 +43,10 @@ class InjectPermissionsUI
             }
         }
 
-        // Inject "Resource Backups" tab on resource detail pages
-        if ($this->isResourcePage($request)) {
-            $injections .= $this->buildBackupTabInjector($request);
-        }
+        // Always inject backup tab script — JS detects resource pages dynamically.
+        // Must be always-present so it works after SPA navigation (wire:navigate)
+        // from non-resource pages into resource pages.
+        $injections .= $this->buildBackupTabInjector();
 
         if (! empty($injections)) {
             $content = str_replace('</body>', $injections.'</body>', $content);
@@ -80,66 +80,38 @@ class InjectPermissionsUI
     }
 
     /**
-     * Check if this is a resource detail page (application, service, or database).
-     */
-    protected function isResourcePage(Request $request): bool
-    {
-        return $request->routeIs('project.application.*')
-            || $request->routeIs('project.service.*')
-            || $request->routeIs('project.database.*');
-    }
-
-    /**
      * Build the JavaScript that injects a "Resource Backups" tab into the heading nav.
      *
-     * The tab is a plain <a> link — no Livewire interactivity — so middleware
-     * injection works fine (unlike interactive forms that need view overlays).
+     * The URL is computed dynamically from window.location.pathname so it
+     * stays correct across SPA navigations (wire:navigate). No server-side
+     * URL generation needed.
      */
-    protected function buildBackupTabInjector(Request $request): string
+    protected function buildBackupTabInjector(): string
     {
-        $routeName = null;
-        $isActive = false;
-
-        if ($request->routeIs('project.application.*')) {
-            $routeName = 'project.application.resource-backups';
-            $isActive = $request->routeIs('project.application.resource-backups');
-        } elseif ($request->routeIs('project.service.*')) {
-            $routeName = 'project.service.resource-backups';
-            $isActive = $request->routeIs('project.service.resource-backups');
-        } elseif ($request->routeIs('project.database.*')) {
-            $routeName = 'project.database.resource-backups';
-            $isActive = $request->routeIs('project.database.resource-backups');
-        }
-
-        if (! $routeName) {
-            return '';
-        }
-
-        try {
-            $url = route($routeName, $request->route()->parameters());
-        } catch (\Throwable $e) {
-            return '';
-        }
-
-        $activeClass = $isActive ? 'dark:text-white' : '';
-
-        return <<<HTML
+        return <<<'HTML'
 
 <!-- Coolify Enhanced - Resource Backups Tab -->
 <script data-navigate-once>
 (function() {
     function injectBackupTab() {
-        // Find the heading navigation bar (inside .navbar-main or nav.pb-6)
-        var navBars = document.querySelectorAll('.navbar-main nav');
-        if (!navBars.length) {
-            // Application heading uses nav > .navbar-main structure
-            var outerNav = document.querySelector('nav.pb-6');
-            if (outerNav) {
-                navBars = outerNav.querySelectorAll('.navbar-main nav');
-            }
+        // Parse URL to detect resource detail pages
+        // Matches: /project/{uuid}/environment/{uuid}/(application|service|database)/{uuid}
+        var match = window.location.pathname.match(
+            /^(\/project\/[^\/]+\/environment\/[^\/]+\/(application|service|database)\/[^\/]+)/
+        );
+
+        if (!match) {
+            // Not on a resource page — nothing to do.
+            // Livewire replaces content on navigation so any old tab is already gone.
+            return;
         }
 
+        var backupUrl = match[1] + '/resource-backups';
+        var isActive = window.location.pathname === backupUrl;
+
+        // Find the heading navigation bar containing "Configuration" link
         var targetNav = null;
+        var navBars = document.querySelectorAll('.navbar-main nav');
         for (var i = 0; i < navBars.length; i++) {
             var links = navBars[i].querySelectorAll('a');
             for (var j = 0; j < links.length; j++) {
@@ -152,17 +124,25 @@ class InjectPermissionsUI
         }
 
         if (!targetNav) return;
-        if (targetNav.querySelector('[data-enhanced-backup-tab]')) return;
 
+        // If tab already exists, update its URL and active state
+        var existingTab = targetNav.querySelector('[data-enhanced-backup-tab]');
+        if (existingTab) {
+            existingTab.href = backupUrl;
+            existingTab.className = isActive ? 'dark:text-white' : '';
+            return;
+        }
+
+        // Create new tab link
         var tabLink = document.createElement('a');
         tabLink.setAttribute('data-enhanced-backup-tab', 'true');
-        tabLink.className = '{$activeClass}';
-        tabLink.href = '{$url}';
+        tabLink.className = isActive ? 'dark:text-white' : '';
+        tabLink.href = backupUrl;
         tabLink.setAttribute('wire:navigate', '');
         tabLink.textContent = 'Resource Backups';
 
-        // Insert before component links (Links, x-applications.links, etc.)
-        // which are typically the last child and are a div/span, not an <a>
+        // Insert before component links (x-applications.links, x-services.links)
+        // which are non-<a> elements at the end of the nav
         var lastNonLink = null;
         var children = targetNav.children;
         for (var k = children.length - 1; k >= 0; k--) {
@@ -179,12 +159,14 @@ class InjectPermissionsUI
         }
     }
 
+    // Run on initial page load
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', injectBackupTab);
     } else {
         injectBackupTab();
     }
 
+    // Re-run after every Livewire SPA navigation
     document.addEventListener('livewire:navigated', function() {
         setTimeout(injectBackupTab, 50);
     });
