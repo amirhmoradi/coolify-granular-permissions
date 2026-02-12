@@ -27,7 +27,7 @@ class ResourceBackupManager extends Component
     // Mode: 'resource' for per-resource, 'global' for settings page (coolify_instance only)
     public string $mode = 'resource';
 
-    // Backup form
+    // New Backup Schedule form
     public string $backupType = 'volume';
 
     public string $frequency = '0 2 * * *';
@@ -47,9 +47,13 @@ class ResourceBackupManager extends Component
 
     public int $retentionDaysLocally = 0;
 
+    public float $retentionMaxStorageLocally = 0;
+
     public int $retentionAmountS3 = 0;
 
     public int $retentionDaysS3 = 0;
+
+    public float $retentionMaxStorageS3 = 0;
 
     // UI state
     public array $availableS3Storages = [];
@@ -59,6 +63,42 @@ class ResourceBackupManager extends Component
     public array $executions = [];
 
     public ?int $selectedBackupId = null;
+
+    public ?int $expandedBackupId = null;
+
+    // Execution pagination
+    public int $executionSkip = 0;
+
+    public int $executionTake = 10;
+
+    public int $executionCount = 0;
+
+    // Edit form (for expanded backup details)
+    public string $editFrequency = '';
+
+    public ?string $editTimezone = null;
+
+    public int $editTimeout = 3600;
+
+    public bool $editSaveS3 = false;
+
+    public bool $editDisableLocalBackup = false;
+
+    public ?int $editS3StorageId = null;
+
+    public int $editRetentionAmountLocally = 0;
+
+    public int $editRetentionDaysLocally = 0;
+
+    public float $editRetentionMaxStorageLocally = 0;
+
+    public int $editRetentionAmountS3 = 0;
+
+    public int $editRetentionDaysS3 = 0;
+
+    public float $editRetentionMaxStorageS3 = 0;
+
+    public bool $editBackupEnabled = true;
 
     public string $saveMessage = '';
 
@@ -89,15 +129,12 @@ class ResourceBackupManager extends Component
         $query = ScheduledResourceBackup::with('latest_log');
 
         if ($this->mode === 'global') {
-            // Global mode: only show coolify_instance backups
             $query->where('backup_type', 'coolify_instance');
         } else {
-            // Resource mode: only show this resource's backups
             $query->where('resource_id', $this->resourceId)
                 ->where('resource_type', $this->resourceType);
         }
 
-        // Scope to current team
         try {
             $teamId = auth()->user()->currentTeam()->id;
             $query->where('team_id', $teamId);
@@ -111,8 +148,18 @@ class ResourceBackupManager extends Component
                 'uuid' => $b->uuid,
                 'backup_type' => $b->backup_type,
                 'frequency' => $b->frequency,
+                'timezone' => $b->timezone,
+                'timeout' => $b->timeout,
                 'enabled' => $b->enabled,
                 'save_s3' => $b->save_s3,
+                'disable_local_backup' => $b->disable_local_backup,
+                's3_storage_id' => $b->s3_storage_id,
+                'retention_amount_locally' => $b->retention_amount_locally,
+                'retention_days_locally' => $b->retention_days_locally,
+                'retention_max_storage_locally' => (float) $b->retention_max_storage_locally,
+                'retention_amount_s3' => $b->retention_amount_s3,
+                'retention_days_s3' => $b->retention_days_s3,
+                'retention_max_storage_s3' => (float) $b->retention_max_storage_s3,
                 'latest_status' => $b->latest_log?->status ?? 'never',
                 'latest_at' => $b->latest_log?->created_at?->diffForHumans() ?? 'Never',
             ])
@@ -132,6 +179,24 @@ class ResourceBackupManager extends Component
         }
     }
 
+    /**
+     * Get backup type options based on mode.
+     */
+    public function getBackupTypeOptionsProperty(): array
+    {
+        if ($this->mode === 'global') {
+            return [
+                'coolify_instance' => 'Coolify Instance — Backs up the entire /data/coolify directory',
+            ];
+        }
+
+        return [
+            'volume' => 'Docker Volumes — Snapshot all Docker volumes as tar.gz archives',
+            'configuration' => 'Configuration Export — Settings, environment variables, and compose files (JSON)',
+            'full' => 'Full Backup — Docker volumes + configuration export combined',
+        ];
+    }
+
     public function createBackup(): void
     {
         try {
@@ -148,13 +213,14 @@ class ResourceBackupManager extends Component
                 's3_storage_id' => $this->saveS3 ? $this->s3StorageId : null,
                 'retention_amount_locally' => $this->retentionAmountLocally,
                 'retention_days_locally' => $this->retentionDaysLocally,
+                'retention_max_storage_locally' => $this->retentionMaxStorageLocally,
                 'retention_amount_s3' => $this->retentionAmountS3,
                 'retention_days_s3' => $this->retentionDaysS3,
+                'retention_max_storage_s3' => $this->retentionMaxStorageS3,
                 'team_id' => $teamId,
                 'enabled' => true,
             ];
 
-            // coolify_instance doesn't need a resource — it backs up /data/coolify
             if ($this->backupType === 'coolify_instance' || $this->mode === 'global') {
                 $data['backup_type'] = 'coolify_instance';
                 $data['resource_type'] = 'coolify_instance';
@@ -206,31 +272,114 @@ class ResourceBackupManager extends Component
             $backup = ScheduledResourceBackup::findOrFail($backupId);
             $backup->delete();
             $this->loadBackups();
-            $this->selectedBackupId = null;
-            $this->executions = [];
+            if ($this->expandedBackupId === $backupId) {
+                $this->expandedBackupId = null;
+            }
+            if ($this->selectedBackupId === $backupId) {
+                $this->selectedBackupId = null;
+                $this->executions = [];
+            }
             $this->dispatch('success', 'Backup schedule deleted.');
         } catch (\Throwable $e) {
             $this->dispatch('error', 'Failed to delete backup.', $e->getMessage());
         }
     }
 
-    public function selectBackup(int $backupId): void
+    /**
+     * Toggle the expanded details panel for a backup schedule.
+     */
+    public function toggleDetails(int $backupId): void
     {
+        if ($this->expandedBackupId === $backupId) {
+            $this->expandedBackupId = null;
+
+            return;
+        }
+
+        $this->expandedBackupId = $backupId;
+
+        // Load edit form from backup data
+        $backup = collect($this->backups)->firstWhere('id', $backupId);
+        if ($backup) {
+            $this->editFrequency = $backup['frequency'];
+            $this->editTimezone = $backup['timezone'];
+            $this->editTimeout = $backup['timeout'];
+            $this->editBackupEnabled = $backup['enabled'];
+            $this->editSaveS3 = $backup['save_s3'];
+            $this->editDisableLocalBackup = $backup['disable_local_backup'];
+            $this->editS3StorageId = $backup['s3_storage_id'];
+            $this->editRetentionAmountLocally = $backup['retention_amount_locally'];
+            $this->editRetentionDaysLocally = $backup['retention_days_locally'];
+            $this->editRetentionMaxStorageLocally = $backup['retention_max_storage_locally'];
+            $this->editRetentionAmountS3 = $backup['retention_amount_s3'];
+            $this->editRetentionDaysS3 = $backup['retention_days_s3'];
+            $this->editRetentionMaxStorageS3 = $backup['retention_max_storage_s3'];
+        }
+
+        // Also select this backup and load executions
         $this->selectedBackupId = $backupId;
+        $this->executionSkip = 0;
         $this->loadExecutions();
+    }
+
+    /**
+     * Save changes to an expanded backup schedule.
+     */
+    public function saveBackupSettings(): void
+    {
+        if (! $this->expandedBackupId) {
+            return;
+        }
+
+        try {
+            $backup = ScheduledResourceBackup::findOrFail($this->expandedBackupId);
+            $backup->update([
+                'frequency' => $this->editFrequency,
+                'timezone' => $this->editTimezone,
+                'timeout' => $this->editTimeout,
+                'enabled' => $this->editBackupEnabled,
+                'save_s3' => $this->editSaveS3,
+                'disable_local_backup' => $this->editDisableLocalBackup,
+                's3_storage_id' => $this->editSaveS3 ? $this->editS3StorageId : null,
+                'retention_amount_locally' => $this->editRetentionAmountLocally,
+                'retention_days_locally' => $this->editRetentionDaysLocally,
+                'retention_max_storage_locally' => $this->editRetentionMaxStorageLocally,
+                'retention_amount_s3' => $this->editRetentionAmountS3,
+                'retention_days_s3' => $this->editRetentionDaysS3,
+                'retention_max_storage_s3' => $this->editRetentionMaxStorageS3,
+            ]);
+
+            $this->loadBackups();
+            $this->dispatch('success', 'Backup settings saved.');
+        } catch (\Throwable $e) {
+            $this->dispatch('error', 'Failed to save backup settings.', $e->getMessage());
+        }
+    }
+
+    /**
+     * Instant toggle for checkboxes in the edit form.
+     */
+    public function editInstantSave(): void
+    {
+        $this->saveBackupSettings();
     }
 
     public function loadExecutions(): void
     {
         if (! $this->selectedBackupId) {
             $this->executions = [];
+            $this->executionCount = 0;
 
             return;
         }
 
-        $this->executions = ScheduledResourceBackupExecution::where('scheduled_resource_backup_id', $this->selectedBackupId)
+        $query = ScheduledResourceBackupExecution::where('scheduled_resource_backup_id', $this->selectedBackupId);
+        $this->executionCount = $query->count();
+
+        $this->executions = $query
             ->orderBy('created_at', 'desc')
-            ->limit(20)
+            ->skip($this->executionSkip)
+            ->take($this->executionTake)
             ->get()
             ->map(fn ($e) => [
                 'id' => $e->id,
@@ -238,13 +387,61 @@ class ResourceBackupManager extends Component
                 'backup_type' => $e->backup_type,
                 'backup_label' => $e->backup_label,
                 'status' => $e->status,
-                'size' => $e->size ? $this->formatBytes((int) $e->size) : '-',
+                'size' => $e->size,
+                'size_formatted' => $e->size ? $this->formatBytes((int) $e->size) : null,
                 'is_encrypted' => $e->is_encrypted,
                 's3_uploaded' => $e->s3_uploaded,
-                'created_at' => $e->created_at->diffForHumans(),
+                's3_storage_deleted' => $e->s3_storage_deleted,
+                'local_storage_deleted' => $e->local_storage_deleted,
+                'filename' => $e->filename,
                 'message' => $e->message,
+                'created_at' => $e->created_at?->toIso8601String(),
+                'created_at_human' => $e->created_at?->diffForHumans(),
+                'created_at_formatted' => $e->created_at?->format('M j, H:i'),
+                'finished_at' => $e->finished_at,
+                'finished_at_human' => $e->finished_at ? \Carbon\Carbon::parse($e->finished_at)->diffForHumans() : null,
+                'finished_at_formatted' => $e->finished_at ? \Carbon\Carbon::parse($e->finished_at)->format('M j, H:i') : null,
+                'duration' => $e->finished_at ? $this->calculateDuration($e->created_at, $e->finished_at) : null,
             ])
             ->toArray();
+    }
+
+    public function nextExecutionPage(): void
+    {
+        if ($this->executionSkip + $this->executionTake < $this->executionCount) {
+            $this->executionSkip += $this->executionTake;
+            $this->loadExecutions();
+        }
+    }
+
+    public function previousExecutionPage(): void
+    {
+        if ($this->executionSkip > 0) {
+            $this->executionSkip = max(0, $this->executionSkip - $this->executionTake);
+            $this->loadExecutions();
+        }
+    }
+
+    public function refreshExecutions(): void
+    {
+        $this->loadExecutions();
+    }
+
+    public function cleanupFailed(): void
+    {
+        if (! $this->selectedBackupId) {
+            return;
+        }
+
+        try {
+            ScheduledResourceBackupExecution::where('scheduled_resource_backup_id', $this->selectedBackupId)
+                ->where('status', 'failed')
+                ->delete();
+            $this->loadExecutions();
+            $this->dispatch('success', 'Failed backup executions cleaned up.');
+        } catch (\Throwable $e) {
+            $this->dispatch('error', 'Failed to cleanup.', $e->getMessage());
+        }
     }
 
     public function deleteExecution(int $executionId): void
@@ -278,6 +475,45 @@ class ResourceBackupManager extends Component
         $i = floor(log($bytes, 1024));
 
         return round($bytes / pow(1024, $i), 2).' '.$units[$i];
+    }
+
+    private function calculateDuration($start, $end): string
+    {
+        try {
+            $startCarbon = \Carbon\Carbon::parse($start);
+            $endCarbon = \Carbon\Carbon::parse($end);
+            $diff = $startCarbon->diff($endCarbon);
+
+            $parts = [];
+            if ($diff->d > 0) {
+                $parts[] = $diff->d.'d';
+            }
+            if ($diff->h > 0) {
+                $parts[] = $diff->h.'h';
+            }
+            if ($diff->i > 0) {
+                $parts[] = $diff->i.'m';
+            }
+            $parts[] = sprintf('%02ds', $diff->s);
+
+            return implode(' ', $parts);
+        } catch (\Throwable $e) {
+            return '-';
+        }
+    }
+
+    /**
+     * Get a human-readable label for a backup type.
+     */
+    public static function backupTypeLabel(string $type): string
+    {
+        return match ($type) {
+            'volume' => 'Docker Volumes',
+            'configuration' => 'Configuration',
+            'full' => 'Full Backup',
+            'coolify_instance' => 'Coolify Instance',
+            default => ucfirst($type),
+        };
     }
 
     public function render()
