@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['web', 'auth', 'verified'])->group(function () {
     // Application resource backups (rendered inside Configuration component via overlay)
     Route::get(
         'project/{project_uuid}/environment/{environment_uuid}/application/{application_uuid}/resource-backups',
