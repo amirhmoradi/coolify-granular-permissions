@@ -28,6 +28,22 @@
                         </div>
                     </div>
                     <livewire:project.database.backup-edit :backup="$backup" :s3s="$s3s" :status="data_get($database, 'status')" />
+
+                    {{-- Coolify Enhanced: Instance File Backup --}}
+                    @if (config('coolify-enhanced.enabled', false))
+                        <div class="mt-8 pt-8 border-t dark:border-coolgray-200 border-gray-200">
+                            <div class="flex items-center gap-2 pb-2">
+                                <h2>Instance File Backup</h2>
+                            </div>
+                            <div class="pb-4 text-sm text-gray-600 dark:text-gray-400">
+                                Schedule backups of the <code>/data/coolify</code> directory (configuration files, docker compose files, SSH keys, etc).
+                                The <strong>database backup above</strong> covers the Coolify PostgreSQL database.
+                                This section covers <strong>everything else</strong> — the files on disk that make up your Coolify installation.
+                            </div>
+                            @livewire('enhanced::resource-backup-manager', ['mode' => 'global'])
+                        </div>
+                    @endif
+
                     <div class="py-4">
                         <livewire:project.database.backup-executions :backup="$backup" />
                     </div>
@@ -35,6 +51,20 @@
                     To configure automatic backup for your Coolify instance, you first need to add a database resource
                     into Coolify.
                     <x-forms.button class="mt-2" wire:click="addCoolifyDatabase">Configure Backup</x-forms.button>
+
+                    {{-- Coolify Enhanced: Instance File Backup (no DB configured yet) --}}
+                    @if (config('coolify-enhanced.enabled', false))
+                        <div class="mt-8 pt-8 border-t dark:border-coolgray-200 border-gray-200">
+                            <div class="flex items-center gap-2 pb-2">
+                                <h2>Instance File Backup</h2>
+                            </div>
+                            <div class="pb-4 text-sm text-gray-600 dark:text-gray-400">
+                                Schedule backups of the <code>/data/coolify</code> directory (configuration files, docker compose files, SSH keys, etc).
+                                You can configure file backups independently of the database backup above.
+                            </div>
+                            @livewire('enhanced::resource-backup-manager', ['mode' => 'global'])
+                        </div>
+                    @endif
                 @endif
             @else
                 <div class="p-6 bg-red-500/10 rounded-lg border border-red-500/20">
@@ -49,19 +79,5 @@
                 </div>
             @endif
         </div>
-
-        {{-- Coolify Enhanced: Instance File Backup --}}
-        @if (config('coolify-enhanced.enabled', false))
-            <div class="pt-8 mt-8 border-t dark:border-coolgray-200">
-                <div class="flex items-center gap-2 pb-2">
-                    <h2>Instance File Backup</h2>
-                </div>
-                <div class="pb-4">
-                    Schedule backups of the entire <code>/data/coolify</code> directory (configuration files, docker compose files, etc).
-                    The database backup above covers the Coolify database. This covers everything else.
-                </div>
-                @livewire('enhanced::resource-backup-manager', ['mode' => 'global'])
-            </div>
-        @endif
     </div>
 </div>
