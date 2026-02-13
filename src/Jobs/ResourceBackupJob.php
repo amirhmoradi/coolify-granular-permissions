@@ -997,6 +997,11 @@ class ResourceBackupJob implements ShouldBeEncrypted, ShouldQueue
      */
     private function resolveNetwork(): string
     {
+        // Coolify instance backups have no resource — use the default coolify network
+        if ($this->backup->backup_type === ScheduledResourceBackup::TYPE_COOLIFY_INSTANCE) {
+            return 'coolify';
+        }
+
         $resource = $this->backup->resource;
 
         if ($resource instanceof \App\Models\Application && $resource->destination) {
