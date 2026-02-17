@@ -441,12 +441,6 @@ action_install_addon() {
         image_to_use="$LOCAL_IMAGE_NAME"
     fi
 
-    # --- Create data directories on host ---
-    step "Creating data directories..."
-
-    mkdir -p /data/coolify/custom-templates
-    success "Created /data/coolify/custom-templates"
-
     # --- Deploy docker-compose.custom.yml ---
     step "Deploying docker-compose.custom.yml..."
 
@@ -459,8 +453,6 @@ services:
     image: ${image_to_use}
     environment:
       - COOLIFY_ENHANCED=true
-    volumes:
-      - /data/coolify/custom-templates:/var/www/html/storage/app/custom-templates
 EOF
 
     success "Created ${CUSTOM_COMPOSE}"
