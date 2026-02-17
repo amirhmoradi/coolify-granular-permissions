@@ -78,6 +78,10 @@ COPY --chown=www-data:www-data src/Overrides/Views/components/settings/navbar.bl
 COPY --chown=www-data:www-data src/Overrides/Helpers/shared.php \
     /var/www/html/bootstrap/helpers/shared.php
 
+# Override New Resource select view to show custom template source labels
+COPY --chown=www-data:www-data src/Overrides/Views/livewire/project/new/select.blade.php \
+    /var/www/html/resources/views/livewire/project/new/select.blade.php
+
 # Copy the s6-overlay script for addon migrations
 COPY --chmod=755 docker/s6-overlay/s6-rc.d/addon-migration/ /etc/s6-overlay/s6-rc.d/addon-migration/
 

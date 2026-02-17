@@ -277,6 +277,15 @@ Modified Coolify files that are copied over originals in the Docker image:
 **databases.php** (`Overrides/Helpers/databases.php`)
 - Modified `deleteBackupsS3()` to use rclone when filename encryption is enabled
 
+**select.blade.php** (`Overrides/Views/livewire/project/new/select.blade.php`)
+- Adds custom template source label badges on service cards in the New Resource page
+- Uses `service._source` field (set by `TemplateSourceService::parseTemplateContent()`) to identify custom templates
+- Badge: small pill in top-right corner showing the source name
+- Doc icon position shifts down when a source label is present
+
+**shared.php** (`Overrides/Helpers/shared.php`)
+- Modifies `get_service_templates()` to merge custom templates from enabled sources alongside built-in ones
+
 ### Policies
 
 All policies follow the same pattern:
@@ -580,6 +589,8 @@ PermissionService::grantEnvironmentAccess($user, $environment, 'view_only');
 11. **Rclone password obscuring** — Uses AES-256-CTR with a well-known fixed key from rclone's source. The PHP implementation must produce exactly the same output as `rclone obscure`.
 12. **Env file for rclone credentials** — Base64-encoded env file written to server, passed via `--env-file` to Docker. Must be cleaned up after use to avoid credential leaks.
 13. **Filename encryption breaks S3 listing** — When `filename_encryption != 'off'`, files on S3 have encrypted names. Cannot use Laravel Storage driver for listing/deleting; must use rclone.
+14. **Custom template `_source` passes through to frontend** — `parseTemplateContent()` adds `_source` and `_source_uuid` to each template object. In `Select.php::loadServices()`, the `+ (array) $service` merge preserves these fields, so Alpine.js can access `service._source` to render source labels.
+15. **Select.blade.php overlay is a full page copy** — The New Resource select overlay copies the entire original view with minimal additions (source label badge + doc icon shift). Mark enhanced additions with `{{-- Coolify Enhanced: ... --}}` comments. Must be kept in sync with upstream Coolify changes.
 
 ## Coolify Source Reference
 
@@ -596,6 +607,10 @@ The Coolify source code is cloned at `docs/coolify-source/` (gitignored). Key re
 | `app/Livewire/Project/Database/Import.php` | Restore component with `restoreFromS3()` |
 | `bootstrap/helpers/databases.php` | Helper functions including `deleteBackupsS3()` |
 | `app/Models/S3Storage.php` | S3 storage model with encrypted casts |
+| `app/Livewire/Project/New/Select.php` | New Resource page component (loadServices method) |
+| `resources/views/livewire/project/new/select.blade.php` | New Resource page view (service card rendering) |
+| `templates/compose/` | Built-in service templates (YAML format reference) |
+| `bootstrap/helpers/shared.php` | Helper functions including `get_service_templates()` |
 
 ## Version Compatibility
 

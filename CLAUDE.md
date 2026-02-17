@@ -163,6 +163,8 @@ coolify-enhanced/
 │   │   │   │   └── configuration.blade.php    # DB config + Resource Backups sidebar
 │   │   │   ├── livewire/project/service/
 │   │   │   │   └── configuration.blade.php    # Service config + Resource Backups sidebar
+│   │   │   ├── livewire/project/new/
+│   │   │   │   └── select.blade.php         # New Resource page + custom source labels
 │   │   │   ├── components/settings/
 │   │   │   │   └── navbar.blade.php          # Settings navbar + Restore tab
 │   │   │   └── components/server/
@@ -199,6 +201,9 @@ coolify-enhanced/
 ├── config/                                     # Package configuration
 ├── docker/                                     # Docker build files
 ├── docs/
+│   ├── custom-templates.md                    # Custom template creation guide
+│   ├── examples/
+│   │   └── whoami.yaml                        # Example custom template
 │   └── coolify-source/                        # Cloned Coolify source (gitignored)
 ├── install.sh                                  # Automated installer
 └── uninstall.sh                                # Automated uninstaller
@@ -227,6 +232,7 @@ coolify-enhanced/
 | `src/Livewire/ResourceBackupPage.php` | Server resource backups page component |
 | `src/Livewire/RestoreBackup.php` | Settings restore/import page with env var bulk import |
 | `src/Overrides/Views/components/settings/navbar.blade.php` | Settings navbar with Restore + Templates tabs |
+| `src/Overrides/Views/livewire/project/new/select.blade.php` | New Resource page with custom template source labels |
 | `src/Overrides/Helpers/shared.php` | Override get_service_templates() to merge custom templates |
 | `src/Services/TemplateSourceService.php` | GitHub API fetch, YAML parsing, template caching |
 | `src/Models/CustomTemplateSource.php` | Custom template source model (repo URL, auth, cache) |
@@ -302,6 +308,7 @@ Two approaches are used to add UI components to Coolify pages:
   - **Resource Configuration** (`project/application/configuration.blade.php`, etc.) — adds "Resource Backups" sidebar item + `@elseif` content section that renders `enhanced::resource-backup-manager`
   - **Server Sidebar** (`components/server/sidebar.blade.php`) — adds "Resource Backups" sidebar item
   - **Settings Navbar** (`components/settings/navbar.blade.php`) — adds "Restore" tab linking to restore/import page
+  - **New Resource Select** (`project/new/select.blade.php`) — adds custom template source name labels on service cards
 
 **Why view overlays for backups?** The configuration pages use `$currentRoute` to conditionally render content. Adding a sidebar item requires both the `<a>` link in the sidebar AND an `@elseif` branch in the content area. This can only be done in the Blade view — not via middleware or JavaScript. The backup manager component (`enhanced::resource-backup-manager`) needs proper Livewire hydration, which requires native rendering in the view.
 
@@ -340,6 +347,8 @@ Two approaches are used to add UI components to Coolify pages:
 27. **GitHub API rate limits** — Unauthenticated: 60 requests/hour. Authenticated: 5000/hour. The sync service uses retry logic but large sources with many files can hit limits without a token.
 28. **Template cache directory** — Custom templates are cached at `/data/coolify/custom-templates/{source-uuid}/templates.json`. This directory must be writable by the www-data user.
 29. **validateDockerComposeForInjection()** — Custom templates are validated using Coolify's injection validator during sync. Templates that fail validation are skipped (not fatal to the sync).
+30. **Custom template `_source` field** — `parseTemplateContent()` adds `_source` (source name) and `_source_uuid` (source UUID) to every custom template. These fields pass through `loadServices()` to the frontend via `+ (array) $service`, enabling the select.blade.php overlay to show source labels on custom template cards.
+31. **Select.blade.php overlay** — The New Resource page overlay adds a source label badge (top-right corner) on service cards from custom template sources. The doc icon position shifts down when a label is present via the `'top-6': service._source` Alpine.js class binding.
 
 ## Important Notes
 
@@ -356,6 +365,7 @@ Two approaches are used to add UI components to Coolify pages:
 ## See Also
 
 - [AGENTS.md](AGENTS.md) - Detailed AI agent instructions
+- [docs/custom-templates.md](docs/custom-templates.md) - Custom template creation guide
 - [docs/coolify-source/](docs/coolify-source/) - Coolify source code reference
 - [docs/architecture.md](docs/architecture.md) - Architecture details
 - [docs/api.md](docs/api.md) - API documentation
