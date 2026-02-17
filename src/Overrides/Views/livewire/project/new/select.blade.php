@@ -73,6 +73,44 @@
                             </div>
                         </div>
                     </div>
+                    {{-- Coolify Enhanced: Source Filter Dropdown --}}
+                    <div x-show="sources.length > 0" class="relative" x-data="{ openSourceDropdown: false }" @click.outside="openSourceDropdown = false">
+                        <div @click="openSourceDropdown = !openSourceDropdown"
+                            class="flex items-center justify-between gap-2 py-1.5 px-3 w-64 text-sm rounded-sm border-0 ring-2 ring-inset ring-neutral-200 dark:ring-coolgray-300 bg-white dark:bg-coolgray-100 cursor-pointer hover:ring-coolgray-400 transition-all whitespace-nowrap">
+                            <span class="text-sm truncate"
+                                x-text="selectedSource === '' ? 'Filter by source' : (selectedSource === '__official__' ? 'Coolify Official' : selectedSource)"
+                                :class="selectedSource === '' ? 'text-neutral-400 dark:text-neutral-600' : 'text-black dark:text-white'"></span>
+                            <svg class="w-4 h-4 transition-transform text-neutral-400 shrink-0"
+                                :class="{ 'rotate-180': openSourceDropdown }" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                        <div x-show="openSourceDropdown" x-transition
+                            class="absolute z-50 w-full mt-1 bg-white dark:bg-coolgray-100 border border-neutral-300 dark:border-coolgray-400 rounded shadow-lg overflow-hidden">
+                            <div class="max-h-60 overflow-auto scrollbar">
+                                <div @click="selectedSource = ''; openSourceDropdown = false"
+                                    class="px-3 py-2 cursor-pointer hover:bg-neutral-100 dark:hover:bg-coolgray-200"
+                                    :class="{ 'bg-neutral-50 dark:bg-coolgray-300': selectedSource === '' }">
+                                    <span class="text-sm">All Sources</span>
+                                </div>
+                                <div @click="selectedSource = '__official__'; openSourceDropdown = false"
+                                    class="px-3 py-2 cursor-pointer hover:bg-neutral-100 dark:hover:bg-coolgray-200"
+                                    :class="{ 'bg-neutral-50 dark:bg-coolgray-300': selectedSource === '__official__' }">
+                                    <span class="text-sm">Coolify Official</span>
+                                </div>
+                                <template x-for="source in sources" :key="source">
+                                    <div @click="selectedSource = source; openSourceDropdown = false"
+                                        class="px-3 py-2 cursor-pointer hover:bg-neutral-100 dark:hover:bg-coolgray-200"
+                                        :class="{ 'bg-neutral-50 dark:bg-coolgray-300': selectedSource === source }">
+                                        <span class="text-sm" x-text="source"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    {{-- End Coolify Enhanced --}}
                 </div>
             </div>
             <div x-show="loading">Loading...</div>
@@ -213,7 +251,9 @@
                     return {
                         search: '',
                         selectedCategory: '',
+                        selectedSource: '', // Coolify Enhanced: source filter
                         categories: [],
+                        sources: [], // Coolify Enhanced: unique custom source names
                         loading: false,
                         isSticky: false,
                         selecting: false,
@@ -242,6 +282,12 @@
                             this.gitBasedApplications = gitBasedApplications;
                             this.dockerBasedApplications = dockerBasedApplications;
                             this.databases = databases;
+                            // Coolify Enhanced: extract unique custom source names
+                            this.sources = [...new Set(
+                                Object.values(services)
+                                    .map(s => s._source)
+                                    .filter(Boolean)
+                            )].sort();
                             this.loading = false;
                             this.$nextTick(() => {
                                 this.$refs.searchInput.focus();
@@ -325,6 +371,15 @@
                         filterAndSort(items, isSort = true) {
                             const searchLower = this.search.trim().toLowerCase();
                             let filtered = Object.values(items);
+
+                            // Coolify Enhanced: Filter by source if selected
+                            if (this.selectedSource !== '') {
+                                if (this.selectedSource === '__official__') {
+                                    filtered = filtered.filter(item => !item._source);
+                                } else {
+                                    filtered = filtered.filter(item => item._source === this.selectedSource);
+                                }
+                            }
 
                             // Filter by category if selected
                             if (this.selectedCategory !== '') {
