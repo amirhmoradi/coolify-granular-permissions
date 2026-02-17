@@ -124,8 +124,7 @@ All four features are **independent** — enable only what you need. When disabl
 ### Settings — Restore & Import
 
 <!-- SCREENSHOT: Settings > Restore page showing the JSON backup viewer and env var bulk import -->
-![Restore Backup](<img width="2362" height="1852" alt="import-server-backups" src="https://github.com/user-attachments/assets/8aa300f0-2703-4975-9fbe-1e33a15c3de1" />
-)
+<img width="2362" height="1852" alt="import-server-backups" src="https://github.com/user-attachments/assets/8aa300f0-2703-4975-9fbe-1e33a15c3de1" />
 
 *Browse configuration backup contents, bulk-import environment variables, and follow step-by-step restoration guides.*
 
