@@ -558,12 +558,48 @@ The "Make Publicly Available" feature (database proxy) now supports all recogniz
 3. Extracts the port from the service's docker-compose configuration
 4. Provides a helpful error message if all methods fail
 
+#### Multi-Port Database Proxy
+
+Some databases (e.g., Memgraph, Neo4j) expose multiple ports — one for database queries and others for admin UIs, log viewers, or alternate protocols. Coolify's built-in proxy only supports a single port. Coolify Enhanced adds multi-port proxy support via the `coolify.proxyPorts` Docker label.
+
+**How to use:** Add the `coolify.proxyPorts` label to your service in the docker-compose template:
+
+```yaml
+services:
+  memgraph:
+    image: memgraph/memgraph:latest
+    labels:
+      coolify.proxyPorts: "7687:bolt,7444:log-viewer"
+```
+
+The label format is `"internalPort:label,internalPort:label,..."`. Each entry declares an internal container port and a human-readable label.
+
+**What happens in the UI:**
+
+When you view the service database in Coolify, instead of a single "Make Publicly Available" toggle, you'll see a port mapping table:
+
+| Port | Label | Enabled | Public Port |
+|------|-------|---------|-------------|
+| 7687 | bolt | Toggle | 17687 |
+| 7444 | log-viewer | Toggle | 17444 |
+
+Each port can be independently enabled/disabled with its own public port number. The system creates a single nginx proxy container that handles all enabled ports.
+
+**Key behaviors:**
+
+- When the `coolify.proxyPorts` label is absent, the UI shows the stock single-port toggle (fully backward compatible)
+- Port configurations are stored in the `proxy_ports` JSON column on the service database
+- All enabled ports share one nginx proxy container with multiple `stream` server blocks
+- Disabling all ports stops and removes the proxy container
+- Public URLs for all enabled ports are displayed in the UI
+
 #### What Works Automatically
 
 | Feature | Recognized DBs (expanded list) | Label/Comment Override | Wire-Compatible | Other DBs |
 |---------|:-----------------------------:|:---------------------:|:--------------:|:---------:|
 | Correct classification | Yes | Yes | Yes | Via label |
 | "Make Publicly Available" | Yes | Yes | Yes | Yes (port map) |
+| Multi-port proxy | Via `coolify.proxyPorts` label | Via `coolify.proxyPorts` label | Via `coolify.proxyPorts` label | Via `coolify.proxyPorts` label |
 | Backup UI visible | — | — | Yes | Set `custom_type` |
 | Dump-based backups | — | — | Yes | Set `custom_type` |
 | Import UI visible | — | — | Yes | Set `custom_type` |
@@ -801,6 +837,10 @@ frequency (cron)                        size / filename
 s3_storage_id                           is_encrypted
 enabled                                 created_at
 
+service_databases (added columns)
+---------------------------------
+proxy_ports (JSON, nullable)
+
 custom_template_sources
 -----------------------
 id / uuid
@@ -812,6 +852,19 @@ sync_status / last_synced_at / sync_error
 ```
 
 For the full architecture document including flow diagrams, security considerations, and extensibility points, see [Architecture](docs/architecture.md).
+
+### Feature Documentation
+
+Each feature has detailed documentation under `docs/features/<feature-name>/`:
+
+| Feature | Folder | Contents |
+|---------|--------|----------|
+| Enhanced Database Classification | [`docs/features/enhanced-database-classification/`](docs/features/enhanced-database-classification/) | PRD, implementation plan, feature overview |
+
+Each feature folder contains:
+- **PRD.md** — Product Requirements Document (problem, goals, design, rationale, risks)
+- **plan.md** — Technical implementation plan (code snippets, architecture, testing checklist)
+- **README.md** — Feature overview and quick reference
 
 ---
 
@@ -854,9 +907,11 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
+3. Create feature documentation under `docs/features/<feature-name>/` with PRD.md, plan.md, and README.md
+4. Implement the feature
+5. Update all documentation (README.md, CLAUDE.md, AGENTS.md, relevant docs/ files)
+6. Commit and push
+7. Open a Pull Request
 
 For development guidance, see [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md).
 
