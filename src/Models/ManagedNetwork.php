@@ -18,6 +18,7 @@ class ManagedNetwork extends Model
         'is_internal' => 'boolean',
         'is_attachable' => 'boolean',
         'is_proxy_network' => 'boolean',
+        'is_encrypted_overlay' => 'boolean',
         'options' => 'array',
         'labels' => 'array',
         'last_synced_at' => 'datetime',
@@ -149,5 +150,13 @@ class ManagedNetwork extends Model
     public function connectedContainerCount(): int
     {
         return $this->resourceNetworks()->where('is_connected', true)->count();
+    }
+
+    /**
+     * Check if this is a Swarm overlay network.
+     */
+    public function getIsOverlayAttribute(): bool
+    {
+        return $this->driver === 'overlay';
     }
 }

@@ -25,12 +25,15 @@ class NetworkSettings extends Component
 
     public int $maxNetworksPerServer;
 
+    public bool $swarmOverlayEncryption;
+
     public function mount(): void
     {
         $this->networkManagementEnabled = config('coolify-enhanced.network_management.enabled', false);
         $this->isolationMode = config('coolify-enhanced.network_management.isolation_mode', 'environment');
         $this->proxyIsolation = config('coolify-enhanced.network_management.proxy_isolation', false);
         $this->maxNetworksPerServer = config('coolify-enhanced.network_management.max_networks_per_server', 200);
+        $this->swarmOverlayEncryption = config('coolify-enhanced.network_management.swarm_overlay_encryption', false);
     }
 
     // Note: These settings are env-based, so we show current values but can't persist changes

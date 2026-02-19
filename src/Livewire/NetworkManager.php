@@ -32,9 +32,19 @@ class NetworkManager extends Component
     // Docker networks (raw list from Docker)
     public array $dockerNetworks = [];
 
+    // Swarm server detection
+    public bool $isSwarmServer = false;
+
+    public bool $isSwarmManager = false;
+
+    // Create network options
+    public bool $newNetworkEncrypted = false;
+
     public function mount(Server $server): void
     {
         $this->server = $server;
+        $this->isSwarmServer = method_exists($server, 'isSwarm') && $server->isSwarm();
+        $this->isSwarmManager = method_exists($server, 'isSwarmManager') && $server->isSwarmManager();
     }
 
     public function switchTab(string $tab): void
@@ -58,11 +68,18 @@ class NetworkManager extends Component
             if ($this->newNetworkInternal) {
                 $network->update(['is_internal' => true]);
             }
+            if ($this->isSwarmServer && $this->newNetworkEncrypted) {
+                $network->update([
+                    'is_encrypted_overlay' => true,
+                    'options' => array_merge($network->options ?? [], ['encrypted' => true]),
+                ]);
+            }
 
             NetworkService::createDockerNetwork($this->server, $network->fresh());
 
             $this->newNetworkName = '';
             $this->newNetworkInternal = false;
+            $this->newNetworkEncrypted = false;
             $this->dispatch('success', 'Shared network created.');
         } catch (\Throwable $e) {
             $this->dispatch('error', 'Failed to create network: '.$e->getMessage());
@@ -167,6 +184,7 @@ class NetworkManager extends Component
             'managedNetworks' => $managedNetworks,
             'proxyIsolationEnabled' => $proxyIsolationEnabled,
             'proxyNetwork' => $proxyNetwork,
+            'isSwarmServer' => $this->isSwarmServer,
         ]);
     }
 }

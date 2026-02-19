@@ -88,5 +88,32 @@
                 </div>
             </div>
         </div>
+
+        {{-- Swarm overlay encryption --}}
+        <div class="p-4 bg-coolgray-100 rounded">
+            <h3 class="pb-2">Swarm Overlay Encryption</h3>
+            <div class="text-sm text-neutral-300 pb-3">
+                On Docker Swarm servers, networks automatically use the <code class="text-cyan-400">overlay</code> driver instead of <code>bridge</code>.
+                This enables multi-host communication between Swarm nodes.
+            </div>
+            <div class="flex flex-col gap-3 text-sm">
+                <div>
+                    <span class="font-bold text-cyan-400">Overlay networks:</span>
+                    <span class="text-neutral-400">Created automatically for Swarm servers. All managed networks (environment, shared, proxy) use the overlay driver.</span>
+                </div>
+                <div>
+                    <span class="font-bold text-yellow-400">Inter-node encryption:</span>
+                    <span class="text-neutral-400">Optional <code>--opt encrypted</code> flag encrypts traffic between Swarm nodes using IPsec. Adds ~5-10% overhead.</span>
+                </div>
+                <div>
+                    <span class="font-bold text-warning">Service updates:</span>
+                    <span class="text-neutral-400">Network changes on Swarm trigger a zero-downtime rolling update via <code>docker service update --network-add</code>.</span>
+                </div>
+            </div>
+            <div class="mt-3 p-3 bg-coolgray-200 rounded font-mono text-xs">
+                <div># Enable default encryption for new overlay networks</div>
+                <div>COOLIFY_SWARM_OVERLAY_ENCRYPTION=true</div>
+            </div>
+        </div>
     </div>
 </div>

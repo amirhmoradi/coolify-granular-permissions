@@ -2,6 +2,13 @@
     <h2 class="pb-4">Networks</h2>
     <div class="subtitle">Manage Docker networks on this server.</div>
 
+    @if ($isSwarmServer)
+        <div class="flex items-center gap-2 pb-2">
+            <span class="px-2 py-0.5 text-xs rounded bg-cyan-500/20 text-cyan-400">Swarm {{ $isSwarmManager ? 'Manager' : 'Worker' }}</span>
+            <span class="text-xs text-neutral-400">Networks use overlay driver for multi-host communication.</span>
+        </div>
+    @endif
+
     {{-- Tab navigation --}}
     <div class="flex gap-2 pb-4">
         <x-forms.button wire:click="switchTab('managed')"
@@ -69,6 +76,9 @@
             <form wire:submit="createSharedNetwork" class="flex gap-2 items-end">
                 <x-forms.input id="newNetworkName" label="Network Name" placeholder="e.g., shared-backend" required />
                 <x-forms.checkbox id="newNetworkInternal" label="Internal Only" />
+                @if ($isSwarmServer)
+                    <x-forms.checkbox id="newNetworkEncrypted" label="Encrypted Overlay" />
+                @endif
                 <x-forms.button type="submit">Create</x-forms.button>
             </form>
         </div>
@@ -92,6 +102,16 @@
                                 @endif">
                                 {{ ucfirst($network->scope) }}
                             </span>
+                            {{-- Driver badge --}}
+                            <span class="px-2 py-0.5 text-xs rounded
+                                @if($network->driver === 'overlay') bg-cyan-500/20 text-cyan-400
+                                @else bg-neutral-500/20 text-neutral-400
+                                @endif">
+                                {{ $network->driver }}
+                            </span>
+                            @if($network->is_encrypted_overlay)
+                                <span class="px-2 py-0.5 text-xs rounded bg-yellow-500/20 text-yellow-400">Encrypted</span>
+                            @endif
                             {{-- Status badge --}}
                             <span class="px-2 py-0.5 text-xs rounded
                                 @if($network->status === 'active') bg-success/20 text-success

@@ -86,10 +86,44 @@ class NetworkReconcileJob implements ShouldQueue
             return;
         }
 
+        // Determine if this is a Swarm server
+        $isSwarm = NetworkService::isSwarmServer($server);
+
         // 1. Ensure environment network exists on this server
         $envNetwork = NetworkService::ensureEnvironmentNetwork($environment, $server);
 
-        // 2. Get container names for this resource
+        // 2. Determine proxy network if applicable
+        $proxyNetwork = null;
+        $proxyIsolation = config('coolify-enhanced.network_management.proxy_isolation', false);
+        if ($proxyIsolation && NetworkService::resourceHasFqdn($this->resource)) {
+            $proxyNetwork = NetworkService::ensureProxyNetwork($server);
+        }
+
+        if ($isSwarm) {
+            // Swarm mode: use docker service update --network-add (batched)
+            $this->reconcileSwarmResource($server, $envNetwork, $proxyNetwork, $isolationMode);
+        } else {
+            // Standalone mode: use docker network connect (per-container)
+            $this->reconcileStandaloneResource($server, $envNetwork, $proxyNetwork, $isolationMode);
+        }
+
+        Log::info('NetworkReconcileJob: Reconciled resource', [
+            'resource' => get_class($this->resource).'#'.$this->resource->id,
+            'network' => $envNetwork->docker_network_name,
+            'swarm' => $isSwarm,
+        ]);
+    }
+
+    /**
+     * Reconcile a resource on a standalone Docker server.
+     * Uses docker network connect per container.
+     */
+    protected function reconcileStandaloneResource(
+        Server $server,
+        ManagedNetwork $envNetwork,
+        ?ManagedNetwork $proxyNetwork,
+        string $isolationMode
+    ): void {
         $containerNames = NetworkService::getContainerNames($this->resource);
         if (empty($containerNames)) {
             Log::info('NetworkReconcileJob: No containers found for resource');
@@ -97,17 +131,16 @@ class NetworkReconcileJob implements ShouldQueue
             return;
         }
 
-        // 3. Connect each container to the environment network
+        // Connect each container to the environment network
         foreach ($containerNames as $containerName) {
             $connected = NetworkService::connectContainer(
                 $server,
                 $envNetwork->docker_network_name,
                 $containerName,
-                [$containerName] // Use container name as alias for DNS
+                [$containerName]
             );
 
             if ($connected) {
-                // Create or update the pivot record
                 ResourceNetwork::updateOrCreate(
                     [
                         'resource_type' => get_class($this->resource),
@@ -124,11 +157,8 @@ class NetworkReconcileJob implements ShouldQueue
             }
         }
 
-        // 4. If proxy isolation is enabled and resource has FQDN, connect to proxy network
-        if (config('coolify-enhanced.network_management.proxy_isolation', false)
-            && NetworkService::resourceHasFqdn($this->resource)) {
-            $proxyNetwork = NetworkService::ensureProxyNetwork($server);
-
+        // Connect to proxy network if applicable
+        if ($proxyNetwork) {
             foreach ($containerNames as $containerName) {
                 NetworkService::connectContainer(
                     $server,
@@ -151,18 +181,88 @@ class NetworkReconcileJob implements ShouldQueue
             }
         }
 
-        // 5. If strict mode: disconnect from the default 'coolify' network
+        // Strict mode: disconnect from default network
         if ($isolationMode === 'strict') {
             foreach ($containerNames as $containerName) {
                 NetworkService::disconnectContainer($server, 'coolify', $containerName);
             }
         }
+    }
 
-        Log::info('NetworkReconcileJob: Reconciled resource', [
-            'resource' => get_class($this->resource).'#'.$this->resource->id,
-            'containers' => $containerNames,
-            'network' => $envNetwork->docker_network_name,
-        ]);
+    /**
+     * Reconcile a resource on a Docker Swarm server.
+     * Uses docker service update --network-add (batched into single command).
+     *
+     * Key difference from standalone: Swarm tasks cannot use `docker network connect`.
+     * Network membership is controlled via the service spec, so we use
+     * `docker service update --network-add` which triggers a rolling update.
+     */
+    protected function reconcileSwarmResource(
+        Server $server,
+        ManagedNetwork $envNetwork,
+        ?ManagedNetwork $proxyNetwork,
+        string $isolationMode
+    ): void {
+        $serviceNames = NetworkService::getSwarmServiceNames($this->resource, $server);
+        if (empty($serviceNames)) {
+            Log::info('NetworkReconcileJob: No Swarm services found for resource');
+
+            return;
+        }
+
+        // Collect networks to add and remove
+        $networksToAdd = [$envNetwork->docker_network_name];
+        if ($proxyNetwork) {
+            $networksToAdd[] = $proxyNetwork->docker_network_name;
+        }
+
+        $networksToRemove = [];
+        if ($isolationMode === 'strict') {
+            $networksToRemove[] = 'coolify-overlay';
+        }
+
+        // Apply to each Swarm service
+        foreach ($serviceNames as $serviceName) {
+            $success = NetworkService::updateSwarmServiceNetworks(
+                $server,
+                $serviceName,
+                $networksToAdd,
+                $networksToRemove
+            );
+
+            if ($success) {
+                // Update pivot records for environment network
+                ResourceNetwork::updateOrCreate(
+                    [
+                        'resource_type' => get_class($this->resource),
+                        'resource_id' => $this->resource->id,
+                        'managed_network_id' => $envNetwork->id,
+                    ],
+                    [
+                        'is_auto_attached' => true,
+                        'is_connected' => true,
+                        'connected_at' => now(),
+                        'aliases' => [$serviceName],
+                    ]
+                );
+
+                // Update pivot records for proxy network
+                if ($proxyNetwork) {
+                    ResourceNetwork::updateOrCreate(
+                        [
+                            'resource_type' => get_class($this->resource),
+                            'resource_id' => $this->resource->id,
+                            'managed_network_id' => $proxyNetwork->id,
+                        ],
+                        [
+                            'is_auto_attached' => true,
+                            'is_connected' => true,
+                            'connected_at' => now(),
+                        ]
+                    );
+                }
+            }
+        }
     }
 
     protected function reconcileServer(): void

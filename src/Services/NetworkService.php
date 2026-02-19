@@ -56,6 +56,11 @@ class NetworkService
                 $parts[] = "--gateway {$network->gateway}";
             }
 
+            // Add encrypted option for overlay networks if configured
+            if ($network->driver === 'overlay' && ($network->options['encrypted'] ?? false)) {
+                $parts[] = '--opt encrypted';
+            }
+
             // Add labels for reconciliation
             $parts[] = '--label coolify.managed=true';
             $parts[] = "--label coolify.scope={$network->scope}";
@@ -288,7 +293,7 @@ class NetworkService
                 [
                     'uuid' => (string) new Cuid2,
                     'name' => $humanName,
-                    'driver' => 'bridge',
+                    'driver' => static::resolveNetworkDriver($server),
                     'scope' => ManagedNetwork::SCOPE_ENVIRONMENT,
                     'team_id' => $environment->project->team_id,
                     'project_id' => $environment->project_id,
@@ -334,7 +339,7 @@ class NetworkService
                 [
                     'uuid' => (string) new Cuid2,
                     'name' => $humanName,
-                    'driver' => 'bridge',
+                    'driver' => static::resolveNetworkDriver($server),
                     'scope' => ManagedNetwork::SCOPE_PROXY,
                     'team_id' => $server->team_id,
                     'is_attachable' => true,
@@ -376,7 +381,7 @@ class NetworkService
                 [
                     'uuid' => $identifier,
                     'name' => $name,
-                    'driver' => 'bridge',
+                    'driver' => static::resolveNetworkDriver($server),
                     'scope' => ManagedNetwork::SCOPE_SHARED,
                     'team_id' => $team->id,
                     'is_attachable' => true,
@@ -464,6 +469,13 @@ class NetworkService
             return;
         }
 
+        // For Swarm servers, delegate to Swarm-specific reconciliation
+        if (static::isSwarmServer($server)) {
+            static::reconcileSwarmResource($resource, $server, $environment);
+
+            return;
+        }
+
         $containerNames = static::getContainerNames($resource);
         if (empty($containerNames)) {
             return;
@@ -519,6 +531,66 @@ class NetworkService
         if ($isolationMode === 'strict') {
             foreach ($containerNames as $containerName) {
                 static::disconnectContainer($server, 'coolify', $containerName, true);
+            }
+        }
+    }
+
+    /**
+     * Reconcile a Swarm resource: ensure managed networks are attached via service update.
+     */
+    protected static function reconcileSwarmResource($resource, Server $server, Environment $environment): void
+    {
+        $envNetwork = static::ensureEnvironmentNetwork($environment, $server);
+
+        $networksToAdd = [$envNetwork->docker_network_name];
+        $networksToRemove = [];
+
+        // Proxy network
+        $proxyIsolation = config('coolify-enhanced.network_management.proxy_isolation', false);
+        $proxyNetwork = null;
+        if ($proxyIsolation && static::resourceHasFqdn($resource)) {
+            $proxyNetwork = static::ensureProxyNetwork($server);
+            $networksToAdd[] = $proxyNetwork->docker_network_name;
+        }
+
+        // Strict mode
+        $isolationMode = config('coolify-enhanced.network_management.isolation_mode', 'environment');
+        if ($isolationMode === 'strict') {
+            $networksToRemove[] = 'coolify-overlay';
+        }
+
+        $serviceNames = static::getSwarmServiceNames($resource, $server);
+        foreach ($serviceNames as $serviceName) {
+            $success = static::updateSwarmServiceNetworks($server, $serviceName, $networksToAdd, $networksToRemove);
+
+            if ($success) {
+                ResourceNetwork::updateOrCreate(
+                    [
+                        'resource_type' => get_class($resource),
+                        'resource_id' => $resource->id,
+                        'managed_network_id' => $envNetwork->id,
+                    ],
+                    [
+                        'is_connected' => true,
+                        'is_auto_attached' => true,
+                        'connected_at' => now(),
+                    ]
+                );
+
+                if ($proxyNetwork) {
+                    ResourceNetwork::updateOrCreate(
+                        [
+                            'resource_type' => get_class($resource),
+                            'resource_id' => $resource->id,
+                            'managed_network_id' => $proxyNetwork->id,
+                        ],
+                        [
+                            'is_connected' => true,
+                            'is_auto_attached' => true,
+                            'connected_at' => now(),
+                        ]
+                    );
+                }
             }
         }
     }
@@ -672,6 +744,13 @@ class NetworkService
             return;
         }
 
+        // For Swarm servers, use service update approach instead of container connect
+        if (static::isSwarmServer($server)) {
+            static::autoAttachSwarmResource($resource, $server, $environment);
+
+            return;
+        }
+
         $containerNames = static::getContainerNames($resource);
         if (empty($containerNames)) {
             return;
@@ -735,6 +814,76 @@ class NetworkService
     }
 
     /**
+     * Auto-attach a Swarm resource to managed networks.
+     *
+     * Uses docker service update --network-add instead of docker network connect.
+     */
+    protected static function autoAttachSwarmResource($resource, Server $server, Environment $environment): void
+    {
+        $envNetwork = static::ensureEnvironmentNetwork($environment, $server);
+
+        $networksToAdd = [$envNetwork->docker_network_name];
+        $networksToRemove = [];
+
+        // Handle proxy network
+        $proxyIsolation = config('coolify-enhanced.network_management.proxy_isolation', false);
+        $proxyNetwork = null;
+        if ($proxyIsolation && static::resourceHasFqdn($resource)) {
+            $proxyNetwork = static::ensureProxyNetwork($server);
+            $networksToAdd[] = $proxyNetwork->docker_network_name;
+        }
+
+        // Strict mode: remove default network
+        $isolationMode = config('coolify-enhanced.network_management.isolation_mode', 'environment');
+        if ($isolationMode === 'strict') {
+            $networksToRemove[] = 'coolify-overlay';
+        }
+
+        // Get Swarm service names and update each
+        $serviceNames = static::getSwarmServiceNames($resource, $server);
+        foreach ($serviceNames as $serviceName) {
+            $success = static::updateSwarmServiceNetworks($server, $serviceName, $networksToAdd, $networksToRemove);
+
+            if ($success) {
+                ResourceNetwork::updateOrCreate(
+                    [
+                        'resource_type' => get_class($resource),
+                        'resource_id' => $resource->id,
+                        'managed_network_id' => $envNetwork->id,
+                    ],
+                    [
+                        'is_connected' => true,
+                        'is_auto_attached' => true,
+                        'connected_at' => now(),
+                    ]
+                );
+
+                if ($proxyNetwork) {
+                    ResourceNetwork::updateOrCreate(
+                        [
+                            'resource_type' => get_class($resource),
+                            'resource_id' => $resource->id,
+                            'managed_network_id' => $proxyNetwork->id,
+                        ],
+                        [
+                            'is_connected' => true,
+                            'is_auto_attached' => true,
+                            'connected_at' => now(),
+                        ]
+                    );
+                }
+            }
+        }
+
+        Log::info('NetworkService: Auto-attached Swarm resource to managed networks', [
+            'resource_type' => get_class($resource),
+            'resource_id' => $resource->id ?? null,
+            'environment' => $environment->name,
+            'services' => $serviceNames,
+        ]);
+    }
+
+    /**
      * Auto-detach a resource from all managed networks.
      *
      * Called when a resource is deleted. Disconnects containers from all
@@ -777,6 +926,191 @@ class NetworkService
             'resource_id' => $resource->id ?? null,
             'networks_removed' => $resourceNetworks->count(),
         ]);
+    }
+
+    // ============================================================
+    // Swarm Support
+    // ============================================================
+
+    /**
+     * Check if a server is running Docker Swarm.
+     */
+    public static function isSwarmServer(Server $server): bool
+    {
+        return method_exists($server, 'isSwarm') && $server->isSwarm();
+    }
+
+    /**
+     * Check if a server is a Swarm manager node.
+     *
+     * Network creation and service updates must be executed on manager nodes.
+     */
+    public static function isSwarmManager(Server $server): bool
+    {
+        return method_exists($server, 'isSwarmManager') && $server->isSwarmManager();
+    }
+
+    /**
+     * Resolve the appropriate Docker network driver for a server.
+     *
+     * Returns 'overlay' for Swarm servers (multi-host networking)
+     * and 'bridge' for standalone Docker servers (single-host).
+     */
+    public static function resolveNetworkDriver(Server $server): string
+    {
+        return static::isSwarmServer($server) ? 'overlay' : 'bridge';
+    }
+
+    /**
+     * Get the Swarm service name(s) for a resource.
+     *
+     * In Docker Swarm, services are named {stack}_{service} when deployed
+     * via docker stack deploy. Coolify uses the application UUID as the stack name.
+     *
+     * For Applications: docker stack deploy creates {app_uuid}_{container_name}
+     * For Services: each sub-container is {service_uuid}_{sub_name}
+     */
+    public static function getSwarmServiceNames($resource, Server $server): array
+    {
+        $serviceNames = [];
+
+        try {
+            if ($resource instanceof Application) {
+                // Coolify deploys Applications as a stack named by UUID
+                // The service name follows the pattern: {uuid}_{container_name}
+                // List actual services to get precise names
+                $output = instant_remote_process(
+                    ["docker service ls --filter 'label=coolify.applicationId={$resource->id}' --format '{{{{.Name}}}}' 2>/dev/null || true"],
+                    $server
+                );
+
+                if (! empty(trim($output))) {
+                    $serviceNames = array_filter(explode("\n", trim($output)));
+                }
+
+                // Fallback: try the UUID as stack name
+                if (empty($serviceNames)) {
+                    $output = instant_remote_process(
+                        ["docker service ls --filter 'name={$resource->uuid}' --format '{{{{.Name}}}}' 2>/dev/null || true"],
+                        $server
+                    );
+
+                    if (! empty(trim($output))) {
+                        $serviceNames = array_filter(explode("\n", trim($output)));
+                    }
+                }
+            } elseif ($resource instanceof Service) {
+                // Services have multiple sub-containers
+                foreach ($resource->applications as $app) {
+                    $output = instant_remote_process(
+                        ["docker service ls --filter 'name={$resource->uuid}_{$app->name}' --format '{{{{.Name}}}}' 2>/dev/null || true"],
+                        $server
+                    );
+
+                    if (! empty(trim($output))) {
+                        $serviceNames = array_merge($serviceNames, array_filter(explode("\n", trim($output))));
+                    }
+                }
+                foreach ($resource->databases as $db) {
+                    $output = instant_remote_process(
+                        ["docker service ls --filter 'name={$resource->uuid}_{$db->name}' --format '{{{{.Name}}}}' 2>/dev/null || true"],
+                        $server
+                    );
+
+                    if (! empty(trim($output))) {
+                        $serviceNames = array_merge($serviceNames, array_filter(explode("\n", trim($output))));
+                    }
+                }
+            } else {
+                // Standalone databases
+                if (property_exists($resource, 'uuid')) {
+                    $output = instant_remote_process(
+                        ["docker service ls --filter 'name={$resource->uuid}' --format '{{{{.Name}}}}' 2>/dev/null || true"],
+                        $server
+                    );
+
+                    if (! empty(trim($output))) {
+                        $serviceNames = array_filter(explode("\n", trim($output)));
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('NetworkService: Failed to get Swarm service names', [
+                'resource' => get_class($resource).'#'.($resource->id ?? '?'),
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return array_values(array_unique($serviceNames));
+    }
+
+    /**
+     * Update a Swarm service's network membership.
+     *
+     * Uses `docker service update --network-add/--network-rm` to modify
+     * the service spec. This triggers a rolling update of the service tasks.
+     *
+     * Multiple networks can be added/removed in a single command to minimize
+     * the number of rolling updates (one update per service, not per network).
+     *
+     * @param  Server  $server  The Swarm server (must be a manager node)
+     * @param  string  $serviceName  The Docker service name
+     * @param  array  $networksToAdd  Network names to add
+     * @param  array  $networksToRemove  Network names to remove
+     * @return bool True if the update succeeded
+     */
+    public static function updateSwarmServiceNetworks(
+        Server $server,
+        string $serviceName,
+        array $networksToAdd = [],
+        array $networksToRemove = []
+    ): bool {
+        if (empty($networksToAdd) && empty($networksToRemove)) {
+            return true;
+        }
+
+        try {
+            $parts = ['docker service update'];
+
+            foreach ($networksToAdd as $network) {
+                $parts[] = "--network-add {$network}";
+            }
+
+            foreach ($networksToRemove as $network) {
+                $parts[] = "--network-rm {$network}";
+            }
+
+            // --detach to avoid blocking on convergence
+            $parts[] = '--detach';
+            $parts[] = $serviceName;
+
+            $command = implode(' ', $parts).' 2>/dev/null || true';
+
+            instant_remote_process([$command], $server);
+
+            Log::info("NetworkService: Updated Swarm service {$serviceName} networks", [
+                'added' => $networksToAdd,
+                'removed' => $networksToRemove,
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning("NetworkService: Failed to update Swarm service {$serviceName} networks", [
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * Get the default Docker network name based on server type.
+     *
+     * Swarm uses 'coolify-overlay', standalone uses 'coolify'.
+     */
+    public static function getDefaultNetworkName(Server $server): string
+    {
+        return static::isSwarmServer($server) ? 'coolify-overlay' : 'coolify';
     }
 
     // ============================================================
@@ -1006,9 +1340,16 @@ class NetworkService
 
             foreach ($applications as $app) {
                 try {
-                    $containerNames = static::getContainerNames($app);
-                    foreach ($containerNames as $containerName) {
-                        static::connectContainer($server, $proxyNetwork->docker_network_name, $containerName);
+                    if (static::isSwarmServer($server)) {
+                        $serviceNames = static::getSwarmServiceNames($app, $server);
+                        foreach ($serviceNames as $serviceName) {
+                            static::updateSwarmServiceNetworks($server, $serviceName, [$proxyNetwork->docker_network_name]);
+                        }
+                    } else {
+                        $containerNames = static::getContainerNames($app);
+                        foreach ($containerNames as $containerName) {
+                            static::connectContainer($server, $proxyNetwork->docker_network_name, $containerName);
+                        }
                     }
 
                     ResourceNetwork::updateOrCreate(
@@ -1039,9 +1380,16 @@ class NetworkService
                 }
 
                 try {
-                    $containerNames = static::getContainerNames($service);
-                    foreach ($containerNames as $containerName) {
-                        static::connectContainer($server, $proxyNetwork->docker_network_name, $containerName);
+                    if (static::isSwarmServer($server)) {
+                        $serviceNames = static::getSwarmServiceNames($service, $server);
+                        foreach ($serviceNames as $serviceName) {
+                            static::updateSwarmServiceNetworks($server, $serviceName, [$proxyNetwork->docker_network_name]);
+                        }
+                    } else {
+                        $containerNames = static::getContainerNames($service);
+                        foreach ($containerNames as $containerName) {
+                            static::connectContainer($server, $proxyNetwork->docker_network_name, $containerName);
+                        }
                     }
 
                     ResourceNetwork::updateOrCreate(

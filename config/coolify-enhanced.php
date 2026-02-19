@@ -142,6 +142,11 @@ return [
 
         // Delay before post-deployment network assignment (seconds)
         'post_deploy_delay' => 3,
+
+        // Enable inter-node encryption for Swarm overlay networks
+        // Uses Docker's --opt encrypted flag (IPsec between Swarm nodes)
+        // Only applies to Swarm servers; ignored for standalone Docker
+        'swarm_overlay_encryption' => env('COOLIFY_SWARM_OVERLAY_ENCRYPTION', false),
     ],
 
     'custom_templates' => [

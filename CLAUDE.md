@@ -131,19 +131,19 @@ Coolify classifies service containers as `ServiceDatabase` or `ServiceApplicatio
 
 ### Network Management Architecture
 
-Provides per-environment Docker network isolation (Phase 1) and proxy network isolation (Phase 2). Phase 1 uses zero overlay files; Phase 2 adds two small overlays (`proxy.php`, `docker.php`).
+Provides per-environment Docker network isolation (Phase 1), proxy network isolation (Phase 2), and Docker Swarm overlay network support (Phase 3). Phase 1 uses zero overlay files; Phase 2 adds two small overlays (`proxy.php`, `docker.php`); Phase 3 adds no new overlays.
 
 #### Phase 1: Environment Network Isolation (zero overlays)
 
 - **Post-deployment hook approach**: Instead of overlaying Coolify's 4130-line `ApplicationDeploymentJob.php`, the system uses Docker-level network manipulation. After Coolify deploys a resource normally, event listeners trigger `NetworkReconcileJob` which connects containers to managed networks via `docker network connect`.
 - **Per-environment isolation**: Each environment gets its own Docker bridge network (`ce-env-{env_uuid}`). Resources within an environment can communicate by container name (DNS). Cross-environment communication requires explicit shared networks.
 - **Shared networks**: User-created networks (`ce-shared-{uuid}`) that resources from any environment can explicitly join, enabling cross-environment communication.
-- **Event-driven reconciliation**: Listens for `ApplicationStatusChanged`, `ServiceStatusChanged`, and `DatabaseStatusChanged` events. Dispatches `NetworkReconcileJob` with a configurable delay (default 3s) after deployment.
+- **Deployment-driven reconciliation**: Uses `ApplicationDeploymentQueue::updated()` model observer for precise application reconciliation (fires when deployment status becomes `finished`). For Services/Databases, listens for `ServiceStatusChanged`/`DatabaseStatusChanged` events and does team-based resource lookup since Coolify's events only carry `teamId`/`userId` (not the resource).
 - **Verify-on-use strategy**: No periodic SSH-heavy sync. Networks are reconciled at deployment, on UI page load (60s cache), and via explicit "Sync Networks" button.
 - **Docker labels for tracking**: All managed networks get `coolify.managed=true` label, enabling filtered `docker network ls` without listing system networks.
 - **Race condition handling**: Idempotent Docker commands (`2>/dev/null || true`), DB unique constraints on `(docker_network_name, server_id)`, and `firstOrCreate` with exception catching.
 - **Three isolation modes**: `none` (manual only), `environment` (auto-create per-env networks), `strict` (also disconnects from default `coolify` network).
-- **Standalone Docker only**: Phase 1 targets bridge networks. Swarm overlay support is Phase 3 (deferred until demand justifies compose-level overlay cost).
+- **Standalone and Swarm support**: Phase 1 uses bridge networks for standalone Docker. Phase 3 adds automatic overlay network support for Swarm servers via `resolveNetworkDriver()`.
 - **Network limit**: Configurable max per server (default 200) to prevent Docker iptables performance degradation.
 
 #### Phase 2: Proxy Network Isolation (two overlays)
@@ -155,6 +155,19 @@ Provides per-environment Docker network isolation (Phase 1) and proxy network is
 - **Migration workflow**: `ProxyMigrationJob` creates proxy network, connects `coolify-proxy` container, and connects all FQDN-bearing resources. After all resources are redeployed, optional cleanup disconnects proxy from non-proxy networks.
 - **Dynamic label generation**: Proxy network name is resolved at label generation time (not stored in DB), so moving a resource to a different server always uses the correct proxy network name.
 - **No parsers.php overlay**: The `parsers.php` call sites (8 calls) are NOT overlaid. Post-deployment reconciliation ensures containers end up on the correct network regardless.
+
+#### Phase 3: Swarm Overlay Network Support (zero new overlays)
+
+- **Automatic driver detection**: `NetworkService::resolveNetworkDriver()` returns `overlay` for Swarm servers, `bridge` for standalone. All `ensure*Network()` methods auto-detect the correct driver.
+- **`docker service update` approach**: Swarm tasks cannot use `docker network connect`. Instead, `NetworkService::updateSwarmServiceNetworks()` uses `docker service update --network-add/--network-rm --detach` to modify the service spec, triggering a zero-downtime rolling update.
+- **Batched network changes**: Multiple `--network-add` and `--network-rm` flags are combined into a single `docker service update` command per service, minimizing the number of rolling updates.
+- **Service name discovery**: `getSwarmServiceNames()` discovers Swarm service names via `docker service ls` with label filters (`coolify.applicationId`) and name filters, handling Applications, Services, and standalone databases.
+- **Manager node awareness**: `isSwarmManager()` checks if a server is a Swarm manager node. Network creation must occur on manager nodes.
+- **Overlay encryption**: Optional `--opt encrypted` flag for IPsec encryption between Swarm nodes. Configured via `COOLIFY_SWARM_OVERLAY_ENCRYPTION=true`.
+- **Default network name**: Strict isolation mode disconnects from `coolify-overlay` (Swarm) instead of `coolify` (standalone).
+- **Event listener fix**: Replaced broken event listeners (Coolify events only carry `teamId`/`userId`, not resource) with `ApplicationDeploymentQueue::updated()` observer for precise application reconciliation and team-based lookup for services/databases.
+- **Proxy overlay for Swarm**: `proxy.php` overlay creates proxy networks with `--driver overlay --attachable` for Swarm servers, with optional `--opt encrypted`.
+- **UI Swarm indicators**: Network manager shows "Swarm Manager/Worker" badge, overlay driver badge, and encrypted overlay indicator. Create network form includes "Encrypted Overlay" checkbox for Swarm servers.
 
 ## Quick Reference
 
@@ -441,6 +454,15 @@ Two approaches are used to add UI components to Coolify pages:
 50. **parsers.php is NOT overlaid** — Its 8 `fqdnLabelsFor*` calls don't pass `proxyNetwork`. Post-deployment reconciliation via `NetworkReconcileJob` ensures containers join the proxy network anyway.
 51. **Proxy migration is a 2-step process** — Step 1: Run "Proxy Migration" (creates network, connects proxy + FQDN resources). Step 2: After ALL resources redeployed, optionally "Cleanup Old Networks" to disconnect proxy from non-proxy networks.
 52. **Default network kept during migration** — `connectProxyToNetworks()` always includes the default `coolify`/`coolify-overlay` network alongside proxy networks, ensuring backward compatibility until migration is complete.
+53. **Coolify events don't carry resources** — `ApplicationStatusChanged($teamId)`, `ServiceStatusChanged($teamId)`, and `DatabaseStatusChanged($userId)` only carry team/user IDs, NOT the actual resource. The event listener fix uses `ApplicationDeploymentQueue::updated()` for precise application reconciliation, and team-based lookup for services/databases.
+54. **Swarm uses `docker service update --network-add`** — Unlike standalone Docker where `docker network connect` works on running containers, Swarm tasks cannot be directly connected to networks. The `docker service update --network-add` command modifies the service spec, triggering a zero-downtime rolling update.
+55. **Overlay networks require manager node** — Network creation (`docker network create --driver overlay`) must be executed on a Swarm manager node. `isSwarmManager()` checks this.
+56. **`resolveNetworkDriver()` auto-detects driver** — All `ensure*Network()` methods use `resolveNetworkDriver($server)` to return `overlay` for Swarm, `bridge` for standalone. No hardcoded driver values.
+57. **Swarm service name discovery** — `getSwarmServiceNames()` uses `docker service ls` with `--filter` to discover service names. Falls back to UUID-based name matching.
+58. **Batched Swarm network changes** — `updateSwarmServiceNetworks()` combines multiple `--network-add` and `--network-rm` flags into a single `docker service update` command, triggering only one rolling update per service.
+59. **Overlay encryption adds IPsec overhead** — `--opt encrypted` enables IPsec encryption between Swarm nodes (~5-10% overhead). Configured via `COOLIFY_SWARM_OVERLAY_ENCRYPTION=true`. Applied during network creation, not retroactively.
+60. **Strict mode uses `coolify-overlay` for Swarm** — When disconnecting from the default network in strict mode, use `coolify-overlay` (Swarm) instead of `coolify` (standalone). `getDefaultNetworkName()` handles this.
+61. **Phase 3 adds zero new overlay files** — All Swarm support is in `NetworkService.php`, `NetworkReconcileJob.php`, and updates to existing overlays. The `proxy.php` overlay's Swarm branches were updated but no new overlays were created.
 
 ## Important Notes
 
@@ -458,6 +480,8 @@ Two approaches are used to add UI components to Coolify pages:
 12. **Phase 1 has zero overlays** - Environment isolation uses post-deployment hooks + Docker API. No overlay files required
 13. **Phase 2 adds two overlays** - `proxy.php` (proxy compose isolation) + `docker.php` (Traefik/Caddy label injection). The existing `shared.php` overlay is also updated for service labels
 14. **Proxy migration** - After enabling `COOLIFY_PROXY_ISOLATION=true`, run "Proxy Migration" from Server > Networks page. All FQDN resources join the proxy network; new deployments auto-join
+15. **Phase 3 adds Swarm support** - Automatic overlay networks for Swarm servers, `docker service update --network-add` for task network assignment, optional IPsec encryption via `COOLIFY_SWARM_OVERLAY_ENCRYPTION=true`
+16. **Swarm service updates cause rolling restarts** - `docker service update --network-add` triggers a rolling update of service tasks. This is a zero-downtime operation but takes ~10-30s per service
 
 ## See Also
 

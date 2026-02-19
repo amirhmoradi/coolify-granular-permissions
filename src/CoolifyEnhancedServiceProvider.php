@@ -235,49 +235,114 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
     }
 
     /**
-     * Register network management: event listeners for post-deployment
+     * Register network management: deployment observers for post-deployment
      * network assignment and resource deletion cleanup.
      *
-     * Uses Coolify's ApplicationStatusChanged and ServiceStatusChanged events
-     * to trigger network reconciliation after deployments complete.
+     * Phase 3: Uses ApplicationDeploymentQueue model observer for precise
+     * application reconciliation, and team-based lookup for services/databases
+     * since Coolify's events only carry teamId/userId (not the resource).
      */
     protected function registerNetworkManagement(): void
     {
         $this->app->booted(function () {
             $delay = config('coolify-enhanced.network_management.post_deploy_delay', 3);
 
-            // Listen for application deployment completion
-            if (class_exists('App\Events\ApplicationStatusChanged')) {
-                Event::listen('App\Events\ApplicationStatusChanged', function ($event) use ($delay) {
-                    if (isset($event->resource) || isset($event->application)) {
-                        $resource = $event->resource ?? $event->application ?? null;
-                        if ($resource) {
-                            NetworkReconcileJob::dispatch($resource)->delay(now()->addSeconds($delay));
+            // Application deployment: observe ApplicationDeploymentQueue status changes
+            // This is the most precise trigger — fires when a specific deployment completes.
+            if (class_exists(\App\Models\ApplicationDeploymentQueue::class)) {
+                \App\Models\ApplicationDeploymentQueue::updated(function ($queue) use ($delay) {
+                    // Only trigger on status transition to 'finished'
+                    if ($queue->isDirty('status') && $queue->status === 'finished') {
+                        try {
+                            $application = $queue->application;
+                            if ($application) {
+                                NetworkReconcileJob::dispatch($application)
+                                    ->delay(now()->addSeconds($delay));
+                            }
+                        } catch (\Throwable $e) {
+                            \Illuminate\Support\Facades\Log::warning('NetworkManagement: Failed to dispatch reconcile for deployment', [
+                                'deployment_uuid' => $queue->deployment_uuid ?? null,
+                                'error' => $e->getMessage(),
+                            ]);
                         }
                     }
                 });
             }
 
-            // Listen for service status changes
+            // Service status changes: Coolify's event carries only teamId
+            // Find all services in the team and reconcile them
             if (class_exists('App\Events\ServiceStatusChanged')) {
                 Event::listen('App\Events\ServiceStatusChanged', function ($event) use ($delay) {
-                    if (isset($event->resource) || isset($event->service)) {
-                        $resource = $event->resource ?? $event->service ?? null;
-                        if ($resource) {
-                            NetworkReconcileJob::dispatch($resource)->delay(now()->addSeconds($delay));
+                    $teamId = $event->teamId ?? null;
+                    if (! $teamId) {
+                        return;
+                    }
+
+                    try {
+                        $services = \App\Models\Service::whereHas('environment.project.team', function ($q) use ($teamId) {
+                            $q->where('id', $teamId);
+                        })->get();
+
+                        foreach ($services as $service) {
+                            NetworkReconcileJob::dispatch($service)
+                                ->delay(now()->addSeconds($delay));
                         }
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('NetworkManagement: Failed to dispatch reconcile for services', [
+                            'team_id' => $teamId,
+                            'error' => $e->getMessage(),
+                        ]);
                     }
                 });
             }
 
-            // Listen for database status changes
+            // Database status changes: Coolify's event carries only userId
+            // Find the user's team and reconcile all databases
             if (class_exists('App\Events\DatabaseStatusChanged')) {
                 Event::listen('App\Events\DatabaseStatusChanged', function ($event) use ($delay) {
-                    if (isset($event->resource) || isset($event->database)) {
-                        $resource = $event->resource ?? $event->database ?? null;
-                        if ($resource) {
-                            NetworkReconcileJob::dispatch($resource)->delay(now()->addSeconds($delay));
+                    $userId = $event->userId ?? null;
+                    if (! $userId) {
+                        return;
+                    }
+
+                    try {
+                        $user = \App\Models\User::find($userId);
+                        $team = $user?->currentTeam();
+                        if (! $team) {
+                            return;
                         }
+
+                        // Reconcile all standalone database types in this team
+                        $databaseClasses = [
+                            \App\Models\StandalonePostgresql::class,
+                            \App\Models\StandaloneMysql::class,
+                            \App\Models\StandaloneMariadb::class,
+                            \App\Models\StandaloneMongodb::class,
+                            \App\Models\StandaloneRedis::class,
+                            \App\Models\StandaloneKeydb::class,
+                            \App\Models\StandaloneDragonfly::class,
+                            \App\Models\StandaloneClickhouse::class,
+                        ];
+
+                        foreach ($databaseClasses as $dbClass) {
+                            if (! class_exists($dbClass)) {
+                                continue;
+                            }
+
+                            $databases = $dbClass::whereHas('environment.project.team', function ($q) use ($team) {
+                                $q->where('id', $team->id);
+                            })->get();
+
+                            foreach ($databases as $database) {
+                                NetworkReconcileJob::dispatch($database)
+                                    ->delay(now()->addSeconds($delay));
+                            }
+                        }
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('NetworkManagement: Failed to dispatch reconcile for databases', [
+                            'user_id' => $userId,
+                            'error' => $e->getMessage(),
+                        ]);
                     }
                 });
             }
