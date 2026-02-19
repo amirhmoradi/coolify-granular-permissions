@@ -3,10 +3,14 @@
 namespace AmirhMoradi\CoolifyEnhanced;
 
 use AmirhMoradi\CoolifyEnhanced\Http\Middleware\InjectPermissionsUI;
+use AmirhMoradi\CoolifyEnhanced\Jobs\NetworkReconcileJob;
+use AmirhMoradi\CoolifyEnhanced\Models\ManagedNetwork;
 use AmirhMoradi\CoolifyEnhanced\Scopes\EnvironmentPermissionScope;
 use AmirhMoradi\CoolifyEnhanced\Scopes\ProjectPermissionScope;
+use AmirhMoradi\CoolifyEnhanced\Services\NetworkService;
 use AmirhMoradi\CoolifyEnhanced\Services\PermissionService;
 use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
@@ -64,6 +68,11 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
         // Register template source auto-sync scheduler
         $this->registerTemplateSyncScheduler();
 
+        // Register network management if enabled
+        if (config('coolify-enhanced.network_management.enabled', false)) {
+            $this->registerNetworkManagement();
+        }
+
         // Defer policy registration to AFTER all service providers have booted.
         //
         // Laravel boots package providers BEFORE application providers.
@@ -116,6 +125,27 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
         Livewire::component(
             'enhanced::custom-template-sources',
             \AmirhMoradi\CoolifyEnhanced\Livewire\CustomTemplateSources::class
+        );
+
+        // Network management components
+        Livewire::component(
+            'enhanced::network-manager',
+            \AmirhMoradi\CoolifyEnhanced\Livewire\NetworkManager::class
+        );
+
+        Livewire::component(
+            'enhanced::network-manager-page',
+            \AmirhMoradi\CoolifyEnhanced\Livewire\NetworkManagerPage::class
+        );
+
+        Livewire::component(
+            'enhanced::resource-networks',
+            \AmirhMoradi\CoolifyEnhanced\Livewire\ResourceNetworks::class
+        );
+
+        Livewire::component(
+            'enhanced::network-settings',
+            \AmirhMoradi\CoolifyEnhanced\Livewire\NetworkSettings::class
         );
     }
 
@@ -205,6 +235,69 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
     }
 
     /**
+     * Register network management: event listeners for post-deployment
+     * network assignment and resource deletion cleanup.
+     *
+     * Uses Coolify's ApplicationStatusChanged and ServiceStatusChanged events
+     * to trigger network reconciliation after deployments complete.
+     */
+    protected function registerNetworkManagement(): void
+    {
+        $this->app->booted(function () {
+            $delay = config('coolify-enhanced.network_management.post_deploy_delay', 3);
+
+            // Listen for application deployment completion
+            if (class_exists('App\Events\ApplicationStatusChanged')) {
+                Event::listen('App\Events\ApplicationStatusChanged', function ($event) use ($delay) {
+                    if (isset($event->resource) || isset($event->application)) {
+                        $resource = $event->resource ?? $event->application ?? null;
+                        if ($resource) {
+                            NetworkReconcileJob::dispatch($resource)->delay(now()->addSeconds($delay));
+                        }
+                    }
+                });
+            }
+
+            // Listen for service status changes
+            if (class_exists('App\Events\ServiceStatusChanged')) {
+                Event::listen('App\Events\ServiceStatusChanged', function ($event) use ($delay) {
+                    if (isset($event->resource) || isset($event->service)) {
+                        $resource = $event->resource ?? $event->service ?? null;
+                        if ($resource) {
+                            NetworkReconcileJob::dispatch($resource)->delay(now()->addSeconds($delay));
+                        }
+                    }
+                });
+            }
+
+            // Listen for database status changes
+            if (class_exists('App\Events\DatabaseStatusChanged')) {
+                Event::listen('App\Events\DatabaseStatusChanged', function ($event) use ($delay) {
+                    if (isset($event->resource) || isset($event->database)) {
+                        $resource = $event->resource ?? $event->database ?? null;
+                        if ($resource) {
+                            NetworkReconcileJob::dispatch($resource)->delay(now()->addSeconds($delay));
+                        }
+                    }
+                });
+            }
+
+            // Cleanup on resource deletion
+            if (class_exists(\App\Models\Application::class)) {
+                \App\Models\Application::deleting(function ($application) {
+                    NetworkService::autoDetachResource($application);
+                });
+            }
+
+            if (class_exists(\App\Models\Service::class)) {
+                \App\Models\Service::deleting(function ($service) {
+                    NetworkService::autoDetachResource($service);
+                });
+            }
+        });
+    }
+
+    /**
      * Override Coolify's default policies with permission-aware versions.
      *
      * Coolify's own policies (as of v4) return true for all operations.
@@ -232,6 +325,9 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
 
             // Sub-resource policies (Coolify's defaults return true for everything)
             \App\Models\EnvironmentVariable::class => \AmirhMoradi\CoolifyEnhanced\Policies\EnvironmentVariablePolicy::class,
+
+            // Network management policy
+            ManagedNetwork::class => \AmirhMoradi\CoolifyEnhanced\Policies\NetworkPolicy::class,
         ];
 
         foreach ($policies as $model => $policy) {

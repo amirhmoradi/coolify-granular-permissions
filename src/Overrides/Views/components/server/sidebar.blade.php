@@ -50,6 +50,12 @@
             href="{{ route('server.resource-backups', ['server_uuid' => $server->uuid]) }}"><span class="menu-item-label">Resource Backups</span>
         </a>
     @endif
+    {{-- Coolify Enhanced: Networks sidebar item --}}
+    @if (config('coolify-enhanced.enabled', false) && config('coolify-enhanced.network_management.enabled', false) && $server->isFunctional())
+        <a class="sub-menu-item {{ $activeMenu === 'networks' ? 'menu-item-active' : '' }}" {{ wireNavigate() }}
+            href="{{ route('server.networks', ['server_uuid' => $server->uuid]) }}"><span class="menu-item-label">Networks</span>
+        </a>
+    @endif
     @if (!$server->isLocalhost())
         <a class="sub-menu-item {{ $activeMenu === 'danger' ? 'menu-item-active' : '' }}" {{ wireNavigate() }}
             href="{{ route('server.delete', ['server_uuid' => $server->uuid]) }}"><span class="menu-item-label">Danger</span></a>

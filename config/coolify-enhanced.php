@@ -110,6 +110,40 @@ return [
     | that appear in the one-click service list.
     |
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Network Management
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for Docker network isolation and management.
+    | Provides per-environment network isolation, shared networks,
+    | dedicated proxy networks, and server-level network management.
+    |
+    */
+    'network_management' => [
+        // Enable network management feature
+        'enabled' => env('COOLIFY_NETWORK_MANAGEMENT', false),
+
+        // Isolation mode: 'none', 'environment', 'strict'
+        // - none: no auto-provisioning, manual network management only
+        // - environment: auto-create per-environment networks, resources auto-join
+        // - strict: same as environment + disconnect from default coolify network
+        'isolation_mode' => env('COOLIFY_NETWORK_ISOLATION', 'environment'),
+
+        // Whether to use a dedicated proxy network (opt-in)
+        // When enabled, only resources with FQDNs join the proxy network
+        'proxy_isolation' => env('COOLIFY_PROXY_ISOLATION', false),
+
+        // Maximum managed networks per server (safety limit)
+        'max_networks_per_server' => (int) env('COOLIFY_MAX_NETWORKS', 200),
+
+        // Network name prefix (avoid collisions with Coolify's naming)
+        'prefix' => 'ce',
+
+        // Delay before post-deployment network assignment (seconds)
+        'post_deploy_delay' => 3,
+    ],
+
     'custom_templates' => [
         // Auto-sync interval (cron expression). Set to null to disable auto-sync.
         'sync_frequency' => env('COOLIFY_TEMPLATE_SYNC_FREQUENCY', '0 */6 * * *'),

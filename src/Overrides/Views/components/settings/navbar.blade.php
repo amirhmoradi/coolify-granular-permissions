@@ -32,6 +32,13 @@
                         Templates
                     </a>
                 @endif
+                {{-- Networks tab: only visible when network management exists --}}
+                @if (in_array(auth()->user()?->teams?->first()?->pivot?->role, ['owner', 'admin']))
+                    <a class="{{ request()->routeIs('settings.networks') ? 'dark:text-white' : '' }}" {{ wireNavigate() }}
+                        href="{{ route('settings.networks') }}">
+                        Networks
+                    </a>
+                @endif
             @endif
             <div class="flex-1"></div>
         </nav>
