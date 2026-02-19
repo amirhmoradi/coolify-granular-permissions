@@ -262,12 +262,21 @@ protected function registerNetworkManagement()
 5. Update `resource_networks.is_connected` status
 6. Log all operations
 
-**Periodic reconciler** (registered in scheduler):
-- Runs every minute
-- For each server with network management enabled:
-  - Compare `resource_networks` desired state with actual Docker state
-  - Fix any drift (reconnect disconnected containers, disconnect unwanted connections)
-  - Update `managed_networks.last_synced_at`
+**Reconciliation strategy: Verify-on-use, not periodic polling.**
+
+Instead of a periodic SSH-heavy sync job, reconcile at known boundary points:
+1. **Before deployment**: `ensureNetworkExists()` for environment + proxy networks (handles manually deleted networks)
+2. **On UI page load**: Lazy check with 60-second cache (avoids hammering SSH)
+3. **Explicit "Sync Networks" button**: Full reconciliation on server networks page
+4. **Server status check**: Piggyback on Coolify's existing `PushServerUpdateJob` — lightweight network count check, dispatch full reconciliation on mismatch
+
+**Docker labeling for reconciliation**: Add `coolify.managed=true` label to every created network, enabling filtered `docker network ls` without listing system networks:
+```bash
+docker network create --driver bridge --attachable \
+  --label coolify.managed=true \
+  --label coolify.environment={uuid} \
+  ce-env-{uuid}
+```
 
 #### 1.5 Auto-Provisioning
 
@@ -407,7 +416,9 @@ When network management is first enabled:
 
 **Scope**: Override proxy network behavior so proxy only connects to designated proxy networks.
 
-**Single overlay file**: `proxy.php` (475 lines — small and stable, changes infrequently upstream).
+**Two overlay files**:
+- `proxy.php` (475 lines — small, stable, changes rarely upstream)
+- `docker.php` (1483 lines — for `fqdnLabelsForTraefik()` and `fqdnLabelsForCaddy()` label injection, 3-line changes each)
 
 Changes to `proxy.php`:
 - `connectProxyToNetworks()` → only connect to networks where `is_proxy_network=true`
@@ -415,14 +426,27 @@ Changes to `proxy.php`:
 - `generateDefaultProxyConfiguration()` → include proxy networks in the compose config
 - `ensureProxyNetworksExist()` → include managed proxy networks
 
-**Traefik label injection**: Add `traefik.docker.network=ce-proxy-{server_uuid}` to all FQDN-bearing resources. This is injected via the `NetworkReconcileJob` by setting Docker labels on running containers:
-```bash
-docker container update --label-add traefik.docker.network=ce-proxy-{server_uuid} {container}
+**Traefik label injection**: Add `traefik.docker.network=ce-proxy-{server_uuid}` to all FQDN-bearing resources.
+
+**Primary approach**: Overlay `docker.php` (1483 lines) to modify `fqdnLabelsForTraefik()` — the single function that generates ALL Traefik labels across all resource types. This is a 3-line addition at the top of one function, covering every code path in one place:
+
+```php
+function fqdnLabelsForTraefik(string $uuid, Collection $domains, /* ... */, ?string $proxyNetwork = null): Collection
+{
+    $labels = collect([]);
+    $labels->push('traefik.enable=true');
+    if ($proxyNetwork) {
+        $labels->push("traefik.docker.network={$proxyNetwork}");
+    }
+    // ... rest unchanged
+}
 ```
-Note: `docker container update` does not support label changes. Instead, the label must be injected at deployment time. Since we can't modify the deployment code without overlays, we use an alternative approach:
-- Add the label to the resource's `custom_labels` field in the database
-- Coolify reads `custom_labels` during deployment and applies them
-- This leverages Coolify's existing label injection mechanism without any overlay
+
+**Caddy equivalent**: `fqdnLabelsForCaddy()` already accepts a `$network` parameter and sets `caddy_ingress_network`. Change it to use the proxy network name instead of the destination network. One-line change in the same overlay.
+
+**Why not model-level `custom_labels`?** If the label is persisted in the DB and the user moves the resource to a different server (with a different proxy network name), the stale label causes routing failures. Generating dynamically in `fqdnLabelsForTraefik()` always reflects the current server.
+
+**CRITICAL**: The `traefik.docker.network` label is NOT optional for multi-network setups. Without it, Traefik randomly selects which network IP to route to, causing intermittent 502 errors that depend on Docker's internal network ordering (changes on restart). This is the #1 footgun in multi-network Docker setups.
 
 **Migration**: Existing installations keep Traefik connected to all networks. After enabling proxy isolation, a migration command:
 1. Creates the proxy network
