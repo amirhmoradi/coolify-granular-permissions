@@ -8,9 +8,10 @@ This file provides guidance to **Claude Code** and other AI assistants when work
 
 1. **Keep documentation updated** - After every significant code change, update CLAUDE.md and AGENTS.md with new learnings, patterns, and pitfalls discovered during implementation.
 2. **Update all documentation on every feature/modification** - Every new feature, modification, or bug fix **must** include updates to: (a) **README.md** — user-facing documentation so users know how to use and configure the feature, (b) **AGENTS.md** — technical details for AI agents including architecture, overlay files, and pitfalls, (c) **CLAUDE.md** — architecture knowledge, package structure, key files, and common pitfalls, (d) **docs/** files — relevant documentation files (e.g., `docs/custom-templates.md` for template-related changes). Do not consider a feature complete until documentation is updated.
-3. **Pull Coolify source on each prompt** - At the start of each session, run `git -C docs/coolify-source pull` to ensure the Coolify reference source is up to date. If the directory doesn't exist, clone it: `git clone --depth 1 https://github.com/coollabsio/coolify.git docs/coolify-source`.
-4. **Browse Coolify source for context** - When working on policies, authorization, or UI integration, always reference the Coolify source under `docs/coolify-source/` to understand how Coolify implements things natively.
-5. **Read before writing** - Always read existing files before modifying them. Understand the current state before making changes.
+3. **Create feature documentation** - Every new feature **must** have a dedicated folder under `docs/features/<feature-name>/` containing at minimum: (a) **PRD.md** — Product Requirements Document with problem statement, goals, solution design, technical decisions with rationale, user experience, files modified, risks, and testing checklist, (b) **plan.md** — Technical implementation plan with code snippets, file changes, and architecture details, (c) **README.md** — Feature overview, components, file list, and links to related docs. Feature documentation should be created before or during implementation and updated as the feature evolves. Use kebab-case for folder names (e.g., `enhanced-database-classification`).
+4. **Pull Coolify source on each prompt** - At the start of each session, run `git -C docs/coolify-source pull` to ensure the Coolify reference source is up to date. If the directory doesn't exist, clone it: `git clone --depth 1 https://github.com/coollabsio/coolify.git docs/coolify-source`.
+5. **Browse Coolify source for context** - When working on policies, authorization, or UI integration, always reference the Coolify source under `docs/coolify-source/` to understand how Coolify implements things natively.
+6. **Read before writing** - Always read existing files before modifying them. Understand the current state before making changes.
 
 ## Project Overview
 
@@ -227,6 +228,11 @@ coolify-enhanced/
 ├── docker/                                     # Docker build files
 ├── docs/
 │   ├── custom-templates.md                    # Custom template creation guide
+│   ├── features/                              # Per-feature documentation
+│   │   └── enhanced-database-classification/  # Database classification + multi-port proxy
+│   │       ├── PRD.md                         # Product Requirements Document
+│   │       ├── plan.md                        # Technical implementation plan
+│   │       └── README.md                      # Feature overview
 │   ├── examples/
 │   │   └── whoami.yaml                        # Example custom template
 │   └── coolify-source/                        # Cloned Coolify source (gitignored)
@@ -417,6 +423,7 @@ Two approaches are used to add UI components to Coolify pages:
 
 - [AGENTS.md](AGENTS.md) - Detailed AI agent instructions
 - [docs/custom-templates.md](docs/custom-templates.md) - Custom template creation guide
+- [docs/features/](docs/features/) - Per-feature documentation (PRD, plan, README)
 - [docs/coolify-source/](docs/coolify-source/) - Coolify source code reference
 - [docs/architecture.md](docs/architecture.md) - Architecture details
 - [docs/api.md](docs/api.md) - API documentation

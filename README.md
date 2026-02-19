@@ -853,6 +853,19 @@ sync_status / last_synced_at / sync_error
 
 For the full architecture document including flow diagrams, security considerations, and extensibility points, see [Architecture](docs/architecture.md).
 
+### Feature Documentation
+
+Each feature has detailed documentation under `docs/features/<feature-name>/`:
+
+| Feature | Folder | Contents |
+|---------|--------|----------|
+| Enhanced Database Classification | [`docs/features/enhanced-database-classification/`](docs/features/enhanced-database-classification/) | PRD, implementation plan, feature overview |
+
+Each feature folder contains:
+- **PRD.md** — Product Requirements Document (problem, goals, design, rationale, risks)
+- **plan.md** — Technical implementation plan (code snippets, architecture, testing checklist)
+- **README.md** — Feature overview and quick reference
+
 ---
 
 ## FAQ
@@ -894,9 +907,11 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
+3. Create feature documentation under `docs/features/<feature-name>/` with PRD.md, plan.md, and README.md
+4. Implement the feature
+5. Update all documentation (README.md, CLAUDE.md, AGENTS.md, relevant docs/ files)
+6. Commit and push
+7. Open a Pull Request
 
 For development guidance, see [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md).
 

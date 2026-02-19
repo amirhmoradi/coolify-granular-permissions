@@ -6,9 +6,10 @@ Detailed instructions for AI assistants working with the Coolify Enhanced packag
 
 1. **Keep docs updated** - After every significant code change, update CLAUDE.md and AGENTS.md with new learnings, patterns, and pitfalls.
 2. **Update all documentation on every feature/modification** - Every new feature, modification, or bug fix **must** include updates to: (a) **README.md** — user-facing documentation so users know how to use and configure the feature, (b) **AGENTS.md** — technical details for AI agents including architecture, overlay files, and pitfalls, (c) **CLAUDE.md** — architecture knowledge, package structure, key files, and common pitfalls, (d) **docs/** files — relevant documentation files (e.g., `docs/custom-templates.md` for template-related changes). Do not consider a feature complete until documentation is updated.
-3. **Pull Coolify source** - At the start of each session, run `git -C docs/coolify-source pull` to update the Coolify reference source. If missing, clone it: `git clone --depth 1 https://github.com/coollabsio/coolify.git docs/coolify-source`.
-4. **Reference Coolify source** - When working on policies, authorization, or UI integration, browse `docs/coolify-source/` to understand Coolify's native implementation.
-5. **Read before writing** - Always read existing files before modifying them.
+3. **Create feature documentation** - Every new feature **must** have a dedicated folder under `docs/features/<feature-name>/` containing at minimum: (a) **PRD.md** — Product Requirements Document with problem statement, goals, solution design, technical decisions with rationale, user experience, files modified, risks, and testing checklist, (b) **plan.md** — Technical implementation plan with code snippets, file changes, and architecture details, (c) **README.md** — Feature overview, components, file list, and links to related docs. Feature documentation should be created before or during implementation and updated as the feature evolves. Use kebab-case for folder names (e.g., `enhanced-database-classification`).
+4. **Pull Coolify source** - At the start of each session, run `git -C docs/coolify-source pull` to update the Coolify reference source. If missing, clone it: `git clone --depth 1 https://github.com/coollabsio/coolify.git docs/coolify-source`.
+5. **Reference Coolify source** - When working on policies, authorization, or UI integration, browse `docs/coolify-source/` to understand Coolify's native implementation.
+6. **Read before writing** - Always read existing files before modifying them.
 
 ## Package Context
 
