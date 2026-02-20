@@ -26,10 +26,17 @@
                     Restore
                 </a>
                 {{-- Templates tab: only visible to admins/owners --}}
-                @if (in_array(auth()->user()?->teams?->first()?->pivot?->role, ['owner', 'admin']))
+                @if (auth()->user()?->isAdmin() || auth()->user()?->isOwner())
                     <a class="{{ request()->routeIs('settings.custom-templates') ? 'dark:text-white' : '' }}" {{ wireNavigate() }}
                         href="{{ route('settings.custom-templates') }}">
                         Templates
+                    </a>
+                @endif
+                {{-- Networks tab: only visible to admins/owners --}}
+                @if (auth()->user()?->isAdmin() || auth()->user()?->isOwner())
+                    <a class="{{ request()->routeIs('settings.networks') ? 'dark:text-white' : '' }}" {{ wireNavigate() }}
+                        href="{{ route('settings.networks') }}">
+                        Networks
                     </a>
                 @endif
             @endif

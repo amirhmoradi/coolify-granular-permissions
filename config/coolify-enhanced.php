@@ -102,6 +102,45 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Network Management
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for Docker network isolation and management.
+    | Provides per-environment network isolation, shared networks,
+    | dedicated proxy networks, and server-level network management.
+    |
+    */
+    'network_management' => [
+        // Enable network management feature
+        'enabled' => env('COOLIFY_NETWORK_MANAGEMENT', false),
+
+        // Isolation mode: 'none', 'environment', 'strict'
+        // - none: no auto-provisioning, manual network management only
+        // - environment: auto-create per-environment networks, resources auto-join
+        // - strict: same as environment + disconnect from default coolify network
+        'isolation_mode' => env('COOLIFY_NETWORK_ISOLATION', 'environment'),
+
+        // Whether to use a dedicated proxy network (opt-in)
+        // When enabled, only resources with FQDNs join the proxy network
+        'proxy_isolation' => env('COOLIFY_PROXY_ISOLATION', false),
+
+        // Maximum managed networks per server (safety limit)
+        'max_networks_per_server' => (int) env('COOLIFY_MAX_NETWORKS', 200),
+
+        // Network name prefix (avoid collisions with Coolify's naming)
+        'prefix' => env('COOLIFY_NETWORK_PREFIX', 'ce'),
+
+        // Delay before post-deployment network assignment (seconds)
+        'post_deploy_delay' => (int) env('COOLIFY_NETWORK_POST_DEPLOY_DELAY', 3),
+
+        // Enable inter-node encryption for Swarm overlay networks
+        // Uses Docker's --opt encrypted flag (IPsec between Swarm nodes)
+        // Only applies to Swarm servers; ignored for standalone Docker
+        'swarm_overlay_encryption' => env('COOLIFY_SWARM_OVERLAY_ENCRYPTION', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Custom Template Sources
     |--------------------------------------------------------------------------
     |

@@ -69,6 +69,11 @@
                 <a class="sub-menu-item" {{ wireNavigate() }} wire:current.exact="menu-item-active"
                     href="{{ route('project.application.resource-backups', ['project_uuid' => $project->uuid, 'environment_uuid' => $environment->uuid, 'application_uuid' => $application->uuid]) }}"><span class="menu-item-label">Resource Backups</span></a>
             @endif
+            {{-- Coolify Enhanced: Networks sidebar item --}}
+            @if (config('coolify-enhanced.enabled', false) && config('coolify-enhanced.network_management.enabled', false))
+                <a class="sub-menu-item" {{ wireNavigate() }} wire:current.exact="menu-item-active"
+                    href="{{ route('project.application.networks', ['project_uuid' => $project->uuid, 'environment_uuid' => $environment->uuid, 'application_uuid' => $application->uuid]) }}"><span class="menu-item-label">Networks</span></a>
+            @endif
             <a class="sub-menu-item" {{ wireNavigate() }} wire:current.exact="menu-item-active"
                 href="{{ route('project.application.danger', ['project_uuid' => $project->uuid, 'environment_uuid' => $environment->uuid, 'application_uuid' => $application->uuid]) }}"><span class="menu-item-label">Danger Zone</span></a>
         </div>
@@ -108,6 +113,13 @@
             {{-- Coolify Enhanced: Resource Backups content --}}
             @elseif ($currentRoute === 'project.application.resource-backups')
                 @livewire('enhanced::resource-backup-manager', [
+                    'resourceId' => $application->id,
+                    'resourceType' => get_class($application),
+                    'resourceName' => $application->name,
+                ])
+            {{-- Coolify Enhanced: Networks content --}}
+            @elseif ($currentRoute === 'project.application.networks')
+                @livewire('enhanced::resource-networks', [
                     'resourceId' => $application->id,
                     'resourceType' => get_class($application),
                     'resourceName' => $application->name,

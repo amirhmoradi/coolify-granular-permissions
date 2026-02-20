@@ -22,6 +22,7 @@ This is a Laravel package that extends Coolify v4 with three main features:
 3. **Resource Backups** — Volume, configuration, and full backups for Applications, Services, and Databases (beyond Coolify's database-only backup)
 4. **Custom Template Sources** — Add external GitHub repositories as sources for docker-compose service templates, extending Coolify's one-click service list
 5. **Enhanced Database Classification** — Expanded database image detection list and `coolify.database` label/`# type: database` comment convention for explicit service classification
+6. **Network Management** — Per-environment Docker network isolation, shared networks, dedicated proxy network, server-level management UI, and per-resource network assignment
 
 It does NOT modify Coolify directly but extends it via Laravel's service provider and policy override system. For encryption and backup features, modified Coolify files are overlaid in the Docker image.
 
@@ -135,6 +136,46 @@ Coolify classifies service containers as `ServiceDatabase` or `ServiceApplicatio
 - **Multi-port database proxy**: `coolify.proxyPorts` Docker label convention (e.g., `"7687:bolt,7444:log-viewer"`) enables proxying multiple TCP ports for a single ServiceDatabase container. Stored in `proxy_ports` JSON column on `service_databases` table. Service/Index.php Livewire overlay detects the label from `docker_compose_raw` and renders per-port toggle/public-port UI. `StartDatabaseProxy` generates multiple nginx `stream` server blocks. Falls back to single-port UI when label is absent
 - **parsers.php NOT overlaid**: The 2484-line parsers.php is not overlaid. Its `isDatabaseImage()` calls don't use our label check, but existing ServiceDatabase records are preserved during re-parse (code checks for existing records before creating new ones). The expanded DATABASE_DOCKER_IMAGES covers most cases at the `isDatabaseImage()` level anyway
 
+### Network Management Architecture
+
+Provides per-environment Docker network isolation (Phase 1), proxy network isolation (Phase 2), and Docker Swarm overlay network support (Phase 3). Phase 1 uses zero overlay files; Phase 2 adds two small overlays (`proxy.php`, `docker.php`); Phase 3 adds no new overlays.
+
+#### Phase 1: Environment Network Isolation (zero overlays)
+
+- **Post-deployment hook approach**: Instead of overlaying Coolify's 4130-line `ApplicationDeploymentJob.php`, the system uses Docker-level network manipulation. After Coolify deploys a resource normally, event listeners trigger `NetworkReconcileJob` which connects containers to managed networks via `docker network connect`.
+- **Per-environment isolation**: Each environment gets its own Docker bridge network (`ce-env-{env_uuid}`). Resources within an environment can communicate by container name (DNS). Cross-environment communication requires explicit shared networks.
+- **Shared networks**: User-created networks (`ce-shared-{uuid}`) that resources from any environment can explicitly join, enabling cross-environment communication.
+- **Deployment-driven reconciliation**: Uses `ApplicationDeploymentQueue::updated()` model observer for precise application reconciliation (fires when deployment status becomes `finished`). For Services/Databases, listens for `ServiceStatusChanged`/`DatabaseStatusChanged` events and does team-based resource lookup since Coolify's events only carry `teamId`/`userId` (not the resource).
+- **Verify-on-use strategy**: No periodic SSH-heavy sync. Networks are reconciled at deployment, on UI page load (60s cache), and via explicit "Sync Networks" button.
+- **Docker labels for tracking**: All managed networks get `coolify.managed=true` label, enabling filtered `docker network ls` without listing system networks.
+- **Race condition handling**: Idempotent Docker commands (`2>/dev/null || true`), DB unique constraints on `(docker_network_name, server_id)`, and `firstOrCreate` with exception catching.
+- **Three isolation modes**: `none` (manual only), `environment` (auto-create per-env networks), `strict` (also disconnects from default `coolify` network).
+- **Standalone and Swarm support**: Phase 1 uses bridge networks for standalone Docker. Phase 3 adds automatic overlay network support for Swarm servers via `resolveNetworkDriver()`.
+- **Network limit**: Configurable max per server (default 200) to prevent Docker iptables performance degradation.
+
+#### Phase 2: Proxy Network Isolation (two overlays)
+
+- **Dedicated proxy network**: Creates `ce-proxy-{server_uuid}` per server. Only resources with FQDNs join it. Prevents proxy from having network-level access to internal-only services.
+- **`traefik.docker.network` label injection**: The `docker.php` overlay adds an optional `$proxyNetwork` parameter to `fqdnLabelsForTraefik()` and `fqdnLabelsForCaddy()`. When proxy isolation is enabled, `generateLabelsApplication()` resolves the proxy network name and passes it. This ensures Traefik always routes through the correct network IP — preventing intermittent 502 errors in multi-network setups.
+- **Proxy compose integration**: The `proxy.php` overlay modifies `connectProxyToNetworks()`, `collectDockerNetworksByServer()`, `generateDefaultProxyConfiguration()`, and `ensureProxyNetworksExist()` to include/prefer the dedicated proxy network when `COOLIFY_PROXY_ISOLATION=true`.
+- **Service label coverage**: The existing `shared.php` overlay is updated to pass `proxyNetwork` to all `fqdnLabelsForTraefik/Caddy` calls for Services and docker-compose Applications.
+- **Migration workflow**: `ProxyMigrationJob` creates proxy network, connects `coolify-proxy` container, and connects all FQDN-bearing resources. After all resources are redeployed, optional cleanup disconnects proxy from non-proxy networks.
+- **Dynamic label generation**: Proxy network name is resolved at label generation time (not stored in DB), so moving a resource to a different server always uses the correct proxy network name.
+- **No parsers.php overlay**: The `parsers.php` call sites (8 calls) are NOT overlaid. Post-deployment reconciliation ensures containers end up on the correct network regardless.
+
+#### Phase 3: Swarm Overlay Network Support (zero new overlays)
+
+- **Automatic driver detection**: `NetworkService::resolveNetworkDriver()` returns `overlay` for Swarm servers, `bridge` for standalone. All `ensure*Network()` methods auto-detect the correct driver.
+- **`docker service update` approach**: Swarm tasks cannot use `docker network connect`. Instead, `NetworkService::updateSwarmServiceNetworks()` uses `docker service update --network-add/--network-rm --detach` to modify the service spec, triggering a zero-downtime rolling update.
+- **Batched network changes**: Multiple `--network-add` and `--network-rm` flags are combined into a single `docker service update` command per service, minimizing the number of rolling updates.
+- **Service name discovery**: `getSwarmServiceNames()` discovers Swarm service names via `docker service ls` with label filters (`coolify.applicationId`) and name filters, handling Applications, Services, and standalone databases.
+- **Manager node awareness**: `isSwarmManager()` checks if a server is a Swarm manager node. Network creation must occur on manager nodes.
+- **Overlay encryption**: Optional `--opt encrypted` flag for IPsec encryption between Swarm nodes. Configured via `COOLIFY_SWARM_OVERLAY_ENCRYPTION=true`.
+- **Default network name**: Strict isolation mode disconnects from `coolify-overlay` (Swarm) instead of `coolify` (standalone).
+- **Event listener fix**: Replaced broken event listeners (Coolify events only carry `teamId`/`userId`, not resource) with `ApplicationDeploymentQueue::updated()` observer for precise application reconciliation and team-based lookup for services/databases.
+- **Proxy overlay for Swarm**: `proxy.php` overlay creates proxy networks with `--driver overlay --attachable` for Swarm servers, with optional `--opt encrypted`.
+- **UI Swarm indicators**: Network manager shows "Swarm Manager/Worker" badge, overlay driver badge, and encrypted overlay indicator. Create network form includes "Encrypted Overlay" checkbox for Swarm servers.
+
 ## Quick Reference
 
 ### Package Structure
@@ -146,13 +187,16 @@ coolify-enhanced/
 │   ├── Services/
 │   │   ├── PermissionService.php              # Core permission logic
 │   │   ├── RcloneService.php                  # Rclone encryption commands
-│   │   └── TemplateSourceService.php          # GitHub template fetch & parse
+│   │   ├── TemplateSourceService.php          # GitHub template fetch & parse
+│   │   └── NetworkService.php                 # Docker network operations + reconciliation
 │   ├── Models/
 │   │   ├── ProjectUser.php                    # Project access pivot
 │   │   ├── EnvironmentUser.php                # Environment override pivot
 │   │   ├── ScheduledResourceBackup.php        # Resource backup schedule model
 │   │   ├── ScheduledResourceBackupExecution.php # Resource backup execution model
-│   │   └── CustomTemplateSource.php           # Custom GitHub template source
+│   │   ├── CustomTemplateSource.php           # Custom GitHub template source
+│   │   ├── ManagedNetwork.php                 # Docker network model
+│   │   └── ResourceNetwork.php               # Resource-network pivot model
 │   ├── Traits/
 │   │   └── HasS3Encryption.php                # S3 encryption helpers for model
 │   ├── Policies/                              # Laravel policies (override Coolify's)
@@ -162,7 +206,8 @@ coolify-enhanced/
 │   │   ├── EnvironmentVariablePolicy.php
 │   │   ├── ProjectPolicy.php
 │   │   ├── ServerPolicy.php
-│   │   └── ServicePolicy.php
+│   │   ├── ServicePolicy.php
+│   │   └── NetworkPolicy.php
 │   ├── Scopes/                                # Eloquent global scopes
 │   │   ├── ProjectPermissionScope.php
 │   │   └── EnvironmentPermissionScope.php
@@ -191,21 +236,26 @@ coolify-enhanced/
 │   │   │   ├── livewire/project/new/
 │   │   │   │   └── select.blade.php         # New Resource page + custom source labels
 │   │   │   ├── components/settings/
-│   │   │   │   └── navbar.blade.php          # Settings navbar + Restore tab
+│   │   │   │   └── navbar.blade.php          # Settings navbar + Restore/Templates/Networks tabs
 │   │   │   └── components/server/
-│   │   │       └── sidebar.blade.php          # Server sidebar + Resource Backups item
+│   │   │       └── sidebar.blade.php          # Server sidebar + Resource Backups + Networks items
 │   │   └── Helpers/
 │   │       ├── constants.php                   # Expanded DATABASE_DOCKER_IMAGES
 │   │       ├── databases.php                  # Encryption-aware S3 delete
-│   │       └── shared.php                     # Custom templates in get_service_templates()
+│   │       ├── shared.php                     # Custom templates + proxy network labels
+│   │       ├── proxy.php                      # Proxy network isolation (Phase 2)
+│   │       └── docker.php                     # Traefik/Caddy proxy label injection (Phase 2)
 │   ├── Jobs/
 │   │   ├── ResourceBackupJob.php              # Volume/config/full backup job
-│   │   └── SyncTemplateSourceJob.php          # Background GitHub template sync
+│   │   ├── SyncTemplateSourceJob.php          # Background GitHub template sync
+│   │   ├── NetworkReconcileJob.php            # Post-deploy network reconciliation
+│   │   └── ProxyMigrationJob.php             # Proxy isolation migration for existing servers
 │   ├── Http/
 │   │   ├── Controllers/Api/                   # API controllers
 │   │   │   ├── CustomTemplateSourceController.php # Template source management API
 │   │   │   ├── PermissionsController.php      # Permission management API
-│   │   │   └── ResourceBackupController.php   # Resource backup API
+│   │   │   ├── ResourceBackupController.php   # Resource backup API
+│   │   │   └── NetworkController.php          # Network management API
 │   │   └── Middleware/
 │   │       └── InjectPermissionsUI.php        # UI injection middleware
 │   └── Livewire/
@@ -214,7 +264,11 @@ coolify-enhanced/
 │       ├── ResourceBackupManager.php          # Resource backup management UI
 │       ├── ResourceBackupPage.php             # Server backup page component
 │       ├── RestoreBackup.php                  # Settings restore/import page
-│       └── CustomTemplateSources.php          # Custom template sources management
+│       ├── CustomTemplateSources.php          # Custom template sources management
+│       ├── NetworkManager.php                 # Server-level network management
+│       ├── NetworkManagerPage.php             # Server networks full-page wrapper
+│       ├── ResourceNetworks.php               # Per-resource network assignment
+│       └── NetworkSettings.php                # Settings page for network policies
 ├── database/migrations/                        # Database migrations
 ├── resources/views/livewire/
 │   ├── access-matrix.blade.php                # Matrix table view
@@ -222,7 +276,11 @@ coolify-enhanced/
 │   ├── resource-backup-manager.blade.php      # Resource backup management view
 │   ├── resource-backup-page.blade.php         # Full-page backup view
 │   ├── restore-backup.blade.php              # Restore/import backup view
-│   └── custom-template-sources.blade.php     # Template sources management view
+│   ├── custom-template-sources.blade.php     # Template sources management view
+│   ├── network-manager.blade.php             # Server network management view
+│   ├── network-manager-page.blade.php        # Server networks full-page view
+│   ├── resource-networks.blade.php           # Per-resource network assignment view
+│   └── network-settings.blade.php            # Network policies settings view
 ├── routes/                                     # API and web routes
 ├── config/                                     # Package configuration
 ├── docker/                                     # Docker build files
@@ -275,6 +333,19 @@ coolify-enhanced/
 | `src/Livewire/CustomTemplateSources.php` | Settings page for managing template sources |
 | `src/Jobs/SyncTemplateSourceJob.php` | Background job for syncing templates from GitHub |
 | `src/Http/Controllers/Api/CustomTemplateSourceController.php` | REST API for template sources |
+| `src/Overrides/Helpers/proxy.php` | Proxy network isolation in proxy compose + connectivity |
+| `src/Overrides/Helpers/docker.php` | Traefik/Caddy proxy network label injection |
+| `src/Jobs/ProxyMigrationJob.php` | Proxy isolation migration for existing servers |
+| `src/Services/NetworkService.php` | Docker network operations, reconciliation, proxy isolation |
+| `src/Models/ManagedNetwork.php` | Docker network model (env, shared, proxy, system scopes) |
+| `src/Models/ResourceNetwork.php` | Polymorphic pivot: resource-to-network membership |
+| `src/Jobs/NetworkReconcileJob.php` | Post-deployment network assignment job |
+| `src/Policies/NetworkPolicy.php` | Permission policy for managed networks |
+| `src/Livewire/NetworkManager.php` | Server-level network management UI |
+| `src/Livewire/NetworkManagerPage.php` | Server networks full-page wrapper |
+| `src/Livewire/ResourceNetworks.php` | Per-resource network assignment UI |
+| `src/Livewire/NetworkSettings.php` | Settings page for network policies |
+| `src/Http/Controllers/Api/NetworkController.php` | REST API for network management |
 | `src/Http/Middleware/InjectPermissionsUI.php` | Injects access matrix into team admin page |
 | `src/Models/ProjectUser.php` | Permission levels and helpers |
 | `config/coolify-enhanced.php` | Configuration options |
@@ -405,6 +476,29 @@ Two approaches are used to add UI components to Coolify pages:
 48. **Service/Index.php overlay maintenance** — Full copy of Coolify's `app/Livewire/Project/Service/Index.php` (~560 lines). Multi-port additions are marked with `[MULTI-PORT PROXY OVERLAY]` comments. Must be kept in sync with upstream changes to the original component.
 49. **Multi-port proxy nginx config** — `StartDatabaseProxy::handleMultiPort()` generates multiple `server` blocks in a single nginx `stream` context. Each server block listens on its own public port and proxy_passes to the container's internal port. All ports share one proxy container.
 50. **Multi-port StopDatabaseProxy** — No changes needed. `StopDatabaseProxy` simply does `docker rm -f {uuid}-proxy`, which stops the single proxy container handling all ports.
+51. **Network management uses post-deployment hooks, not overlays** — The `NetworkReconcileJob` runs after Coolify finishes its normal deployment. Containers are connected to managed networks via `docker network connect`. This avoids overlaying `ApplicationDeploymentJob.php` (4130 lines, 16+ network references).
+52. **Network race conditions** — Docker's `network create` and `network connect` are idempotent with `2>/dev/null || true`. DB unique constraints on `(docker_network_name, server_id)` handle concurrent `firstOrCreate` calls. The second caller catches the unique violation and fetches the existing record.
+53. **Strict isolation disconnects from `coolify` network** — In `strict` mode, resources are disconnected from the default `coolify` Docker network (standalone) or `coolify-overlay` (Swarm) after being connected to their environment network. This breaks services that rely on the default network for inter-container communication. Only use if all services are properly assigned to managed networks.
+54. **Network event listeners** — Applications use `ApplicationDeploymentQueue::updated()` model observer (NOT the `ApplicationStatusChanged` event). Services and databases use `ServiceStatusChanged` and `DatabaseStatusChanged` event listeners with team-based lookup. If Coolify changes event signatures or adds new events, update `registerNetworkManagement()` in the service provider.
+55. **Shared networks are for cross-environment communication** — Resources from different environments cannot communicate by default (separate bridge networks). Users must create shared networks and manually attach resources to enable cross-env connectivity.
+56. **Network limit per server** — Default 200. Docker bridge networks consume iptables rules (~10 per network). At 200+ networks, `iptables -L` performance degrades. The limit is configurable via `COOLIFY_MAX_NETWORKS` env var.
+57. **PR preview deployments do NOT auto-join environment networks** — Preview deploys create their own `{app_uuid}-{pr_id}` network. The reconcile job only triggers for the main resource, not PR previews. This is intentional: previews should not access production databases.
+58. **`traefik.docker.network` is NOT optional for multi-network setups** — Without it, Traefik randomly selects which network IP to route to, causing intermittent 502 errors that depend on Docker's internal network ordering (changes on restart). Phase 2's proxy isolation overlay injects this label automatically.
+59. **Proxy network label is dynamic, not DB-stored** — The proxy network name is resolved at label generation time from `ManagedNetwork` table, not stored in the resource's `custom_labels`. This prevents stale labels when resources move between servers.
+60. **proxy.php overlay covers 4 functions** — `connectProxyToNetworks()`, `collectDockerNetworksByServer()`, `generateDefaultProxyConfiguration()`, `ensureProxyNetworksExist()`. Each has a `[PROXY ISOLATION OVERLAY]` marked block guarded by dual config check (`proxy_isolation` + `enabled`).
+61. **docker.php overlay covers 3 functions** — `fqdnLabelsForTraefik()` (+optional `$proxyNetwork` param), `fqdnLabelsForCaddy()` (+optional `$proxyNetwork` param), `generateLabelsApplication()` (+proxy network resolution). All marked with `[PROXY ISOLATION OVERLAY]`.
+62. **parsers.php is NOT overlaid** — Its 8 `fqdnLabelsFor*` calls don't pass `proxyNetwork`. Post-deployment reconciliation via `NetworkReconcileJob` ensures containers join the proxy network anyway.
+63. **Proxy migration is a 2-step process** — Step 1: Run "Proxy Migration" (creates network, connects proxy + FQDN resources). Step 2: After ALL resources redeployed, optionally "Cleanup Old Networks" to disconnect proxy from non-proxy networks.
+64. **Default network kept during migration** — `connectProxyToNetworks()` always includes the default `coolify`/`coolify-overlay` network alongside proxy networks, ensuring backward compatibility until migration is complete.
+65. **Coolify events don't carry resources** — `ApplicationStatusChanged($teamId)`, `ServiceStatusChanged($teamId)`, and `DatabaseStatusChanged($userId)` only carry team/user IDs, NOT the actual resource. The event listener fix uses `ApplicationDeploymentQueue::updated()` for precise application reconciliation, and team-based lookup for services/databases.
+66. **Swarm uses `docker service update --network-add`** — Unlike standalone Docker where `docker network connect` works on running containers, Swarm tasks cannot be directly connected to networks. The `docker service update --network-add` command modifies the service spec, triggering a zero-downtime rolling update.
+67. **Overlay networks require manager node** — Network creation (`docker network create --driver overlay`) must be executed on a Swarm manager node. `isSwarmManager()` checks this.
+68. **`resolveNetworkDriver()` auto-detects driver** — All `ensure*Network()` methods use `resolveNetworkDriver($server)` to return `overlay` for Swarm, `bridge` for standalone. No hardcoded driver values.
+69. **Swarm service name discovery** — `getSwarmServiceNames()` uses `docker service ls` with `--filter` to discover service names. Falls back to UUID-based name matching.
+70. **Batched Swarm network changes** — `updateSwarmServiceNetworks()` combines multiple `--network-add` and `--network-rm` flags into a single `docker service update` command, triggering only one rolling update per service.
+71. **Overlay encryption adds IPsec overhead** — `--opt encrypted` enables IPsec encryption between Swarm nodes (~5-10% overhead). Configured via `COOLIFY_SWARM_OVERLAY_ENCRYPTION=true`. Applied during network creation, not retroactively.
+72. **Strict mode uses `coolify-overlay` for Swarm** — When disconnecting from the default network in strict mode, use `coolify-overlay` (Swarm) instead of `coolify` (standalone). `getDefaultNetworkName()` handles this.
+73. **Phase 3 adds zero new overlay files** — All Swarm support is in `NetworkService.php`, `NetworkReconcileJob.php`, and updates to existing overlays. The `proxy.php` overlay's Swarm branches were updated but no new overlays were created.
 
 ## Important Notes
 
@@ -418,6 +512,12 @@ Two approaches are used to add UI components to Coolify pages:
 8. **Resource backups** - Volume, configuration, and full backups via `enhanced::resource-backup-manager` component
 9. **Custom templates** - External GitHub repos as template sources, managed via Settings > Templates page
 10. **Database classification** - Expanded image list + `coolify.database` label + `# type: database` comment for explicit service classification
+11. **Network management** - Per-environment Docker network isolation via `COOLIFY_NETWORK_MANAGEMENT=true`. Modes: `none`, `environment`, `strict`. Proxy isolation via `COOLIFY_PROXY_ISOLATION=true`
+12. **Phase 1 has zero overlays** - Environment isolation uses post-deployment hooks + Docker API. No overlay files required
+13. **Phase 2 adds two overlays** - `proxy.php` (proxy compose isolation) + `docker.php` (Traefik/Caddy label injection). The existing `shared.php` overlay is also updated for service labels
+14. **Proxy migration** - After enabling `COOLIFY_PROXY_ISOLATION=true`, run "Proxy Migration" from Server > Networks page. All FQDN resources join the proxy network; new deployments auto-join
+15. **Phase 3 adds Swarm support** - Automatic overlay networks for Swarm servers, `docker service update --network-add` for task network assignment, optional IPsec encryption via `COOLIFY_SWARM_OVERLAY_ENCRYPTION=true`
+16. **Swarm service updates cause rolling restarts** - `docker service update --network-add` triggers a rolling update of service tasks. This is a zero-downtime operation but takes ~10-30s per service
 
 ## See Also
 

@@ -90,6 +90,14 @@ COPY --chown=www-data:www-data src/Overrides/Views/components/settings/navbar.bl
 COPY --chown=www-data:www-data src/Overrides/Helpers/shared.php \
     /var/www/html/bootstrap/helpers/shared.php
 
+# Override proxy helper for proxy network isolation (Phase 2)
+COPY --chown=www-data:www-data src/Overrides/Helpers/proxy.php \
+    /var/www/html/bootstrap/helpers/proxy.php
+
+# Override docker helper for Traefik/Caddy proxy network label injection (Phase 2)
+COPY --chown=www-data:www-data src/Overrides/Helpers/docker.php \
+    /var/www/html/bootstrap/helpers/docker.php
+
 # Override Service/Index Livewire component with multi-port proxy support
 COPY --chown=www-data:www-data src/Overrides/Livewire/Project/Service/Index.php \
     /var/www/html/app/Livewire/Project/Service/Index.php

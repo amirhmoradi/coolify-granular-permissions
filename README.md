@@ -4,7 +4,7 @@
 [![Build and Publish Docker Image](https://github.com/amirhmoradi/coolify-enhanced/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/amirhmoradi/coolify-enhanced/actions/workflows/docker-publish.yml)
 [![Docker Image](https://img.shields.io/badge/ghcr.io-coolify--enhanced-blue)](https://ghcr.io/amirhmoradi/coolify-enhanced)
 
-**The missing enterprise features for Coolify v4 — granular permissions, encrypted backups, volume/config backups, custom service templates, and enhanced database classification.**
+**The missing enterprise features for Coolify v4 — granular permissions, encrypted backups, volume/config backups, custom service templates, enhanced database classification, and Docker network isolation.**
 
 Coolify Enhanced is a drop-in addon for [Coolify](https://coolify.io) that adds the access control, backup security, and template extensibility features that teams need when running Coolify in production. It installs in under 2 minutes, requires zero changes to your existing setup, and can be removed cleanly at any time.
 
@@ -23,8 +23,9 @@ Coolify v4 is an excellent self-hosted PaaS, but ships with a few limitations fo
 | **Volume & config backups** | Only database dumps are backed up | Docker volumes, app configuration, and full resource backups on schedule |
 | **Service templates** | Limited to Coolify's built-in 200+ templates | Add unlimited custom templates from any GitHub repository |
 | **Database classification** | Many databases (Memgraph, Milvus, Qdrant, etc.) misclassified as applications | 50+ additional database images recognized; explicit label and comment overrides |
+| **Network isolation** | All containers share a single flat Docker network | Per-environment bridge networks, dedicated proxy network, cross-env shared networks, Docker Swarm overlay support |
 
-All five features are **independent** — enable only what you need. When disabled, Coolify behaves exactly as stock.
+All six features are **independent** — enable only what you need. When disabled, Coolify behaves exactly as stock.
 
 ---
 
@@ -39,6 +40,7 @@ All five features are **independent** — enable only what you need. When disabl
   - [Resource Backups (Volumes, Config, Full)](#3-resource-backups)
   - [Custom Template Sources](#4-custom-template-sources)
   - [Enhanced Database Classification](#5-enhanced-database-classification)
+  - [Network Management](#6-network-management)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [API Reference](#api-reference)
@@ -83,6 +85,16 @@ All five features are **independent** — enable only what you need. When disabl
 - **Wire-compatible backup support** — YugabyteDB, TiDB, FerretDB, Percona, and Apache AGE get native dump-based backups
 - **Expanded port mapping** — "Make Publicly Available" works for all recognized database types
 - **Meaningful error messages** — unsupported backup types guide users to `custom_type` or Resource Backups
+
+### Network Management
+- **Per-environment isolation** — each environment gets its own Docker bridge network
+- **Shared networks** — user-created cross-environment communication channels
+- **Proxy network isolation** — dedicated proxy network prevents the reverse proxy from accessing internal services
+- **Docker Swarm support** — automatic overlay networks for multi-host clusters with optional IPsec encryption
+- **Three isolation modes**: `none` (manual only), `environment` (auto per-env), `strict` (disconnects from default)
+- **Post-deployment hooks** — zero overlay files for Phase 1; containers joined to networks after Coolify deploys normally
+- Server-level network management UI + per-resource network assignment UI
+- REST API for automation
 
 ### Custom Template Sources
 - Add any GitHub repository (public or private) as a template source
@@ -607,6 +619,83 @@ Each port can be independently enabled/disabled with its own public port number.
 
 ---
 
+### 6. Network Management
+
+Coolify's default networking puts all containers on a single flat `coolify` Docker network. This means every container can reach every other container by name — no isolation between environments, projects, or teams.
+
+Coolify Enhanced adds per-environment Docker network isolation, a dedicated proxy network, shared cross-environment networks, and Docker Swarm overlay support.
+
+#### Three Isolation Modes
+
+| Mode | Behavior |
+|------|----------|
+| **`none`** | Manual only — no auto-created networks; users manage via UI/API |
+| **`environment`** (default) | Each environment gets its own Docker bridge network (`ce-env-{uuid}`). Resources in the same environment communicate by container name. Cross-environment requires explicit shared networks |
+| **`strict`** | Like `environment`, but also disconnects containers from the default `coolify` network. Only use when all services are properly assigned |
+
+#### Proxy Network Isolation (Phase 2)
+
+When enabled, a dedicated proxy network (`ce-proxy-{server_uuid}`) separates the reverse proxy from internal services. Only resources with FQDNs join it. This prevents Traefik/Caddy from having network-level access to backend databases and internal services.
+
+The system automatically injects `traefik.docker.network` labels during label generation, preventing intermittent 502 errors in multi-network setups.
+
+#### Docker Swarm Support (Phase 3)
+
+For Swarm clusters, the system automatically:
+- Creates overlay networks (instead of bridge) with `--attachable` flag
+- Uses `docker service update --network-add` for network assignment (Swarm tasks can't use `docker network connect`)
+- Batches network changes into single service updates to minimize rolling restarts
+- Optionally enables IPsec encryption between Swarm nodes via `COOLIFY_SWARM_OVERLAY_ENCRYPTION=true`
+
+#### How It Works
+
+```
+Resource deployed normally by Coolify
+     |
+     v
+ApplicationDeploymentQueue status → 'finished'
+     |
+     v
+NetworkReconcileJob triggered
+     |
+     v
+1. Ensure environment network exists (ce-env-{uuid})
+2. Connect all containers to environment network
+3. If resource has FQDN + proxy isolation: connect to proxy network
+4. If strict mode: disconnect from default 'coolify' network
+5. Update resource_networks pivot table
+```
+
+This post-deployment hook approach avoids overlaying Coolify's 4,130-line `ApplicationDeploymentJob.php`.
+
+#### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COOLIFY_NETWORK_MANAGEMENT` | `false` | Enable/disable network management |
+| `COOLIFY_NETWORK_ISOLATION_MODE` | `environment` | Isolation mode: `none`, `environment`, `strict` |
+| `COOLIFY_PROXY_ISOLATION` | `false` | Enable dedicated proxy network |
+| `COOLIFY_SWARM_OVERLAY_ENCRYPTION` | `false` | Enable IPsec for Swarm overlay networks |
+| `COOLIFY_MAX_NETWORKS` | `200` | Max managed networks per server (iptables safety limit) |
+
+#### Where to Find It
+
+| Location | What You See |
+|----------|-------------|
+| **Server > Networks** | Network management with create/delete/sync, Docker networks tab |
+| **Resource > Configuration > Networks** | Per-resource network assignment and disconnection |
+| **Settings > Networks** | Global network policy configuration |
+
+#### Proxy Migration Workflow
+
+1. Set `COOLIFY_PROXY_ISOLATION=true` in your environment
+2. Go to **Server > Networks** and click **Run Proxy Migration**
+3. This creates the proxy network, connects the proxy container, and connects all FQDN resources
+4. Redeploy all resources (so they get `traefik.docker.network` labels)
+5. Optionally click **Cleanup Old Networks** to disconnect the proxy from non-proxy networks
+
+---
+
 ## Installation
 
 ### Requirements
@@ -693,6 +782,11 @@ For detailed instructions including manual install, database migrations, and tro
 | `COOLIFY_RCLONE_IMAGE` | `rclone/rclone:latest` | Docker image for rclone operations |
 | `COOLIFY_TEMPLATE_SYNC_FREQUENCY` | `0 */6 * * *` | Cron expression for auto-syncing template sources (empty to disable) |
 | `COOLIFY_TEMPLATE_CACHE_DIR` | `storage/app/custom-templates` | Cache directory for fetched templates |
+| `COOLIFY_NETWORK_MANAGEMENT` | `false` | Enable per-environment Docker network isolation |
+| `COOLIFY_PROXY_ISOLATION` | `false` | Enable dedicated proxy network (requires network management) |
+| `COOLIFY_NETWORK_ISOLATION_MODE` | `environment` | Isolation mode: `none`, `environment`, or `strict` |
+| `COOLIFY_MAX_NETWORKS` | `200` | Maximum managed networks per server |
+| `COOLIFY_SWARM_OVERLAY_ENCRYPTION` | `false` | Enable IPsec for Swarm overlay networks |
 
 > For backward compatibility, `COOLIFY_GRANULAR_PERMISSIONS=true` also enables the addon.
 
@@ -757,6 +851,21 @@ All endpoints require Bearer token authentication (Laravel Sanctum).
 | `GET` | `/api/v1/resource-backups/{id}` | Get schedule details |
 | `PUT` | `/api/v1/resource-backups/{id}` | Update a schedule |
 | `DELETE` | `/api/v1/resource-backups/{id}` | Delete a schedule |
+
+### Network Management API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/networks/{serverUuid}` | List managed networks for a server |
+| `POST` | `/api/v1/networks/{serverUuid}` | Create a shared network |
+| `GET` | `/api/v1/networks/{serverUuid}/{networkUuid}` | Get network details + Docker info |
+| `DELETE` | `/api/v1/networks/{serverUuid}/{networkUuid}` | Delete a managed network |
+| `POST` | `/api/v1/networks/{serverUuid}/sync` | Sync networks from Docker |
+| `POST` | `/api/v1/networks/{serverUuid}/proxy/migrate` | Run proxy isolation migration |
+| `POST` | `/api/v1/networks/{serverUuid}/proxy/cleanup` | Disconnect proxy from non-proxy networks |
+| `GET` | `/api/v1/networks/resource/{type}/{uuid}` | List networks for a resource |
+| `POST` | `/api/v1/networks/resource/{type}/{uuid}/attach` | Attach a resource to a network |
+| `DELETE` | `/api/v1/networks/resource/{type}/{uuid}/{networkUuid}` | Detach a resource from a network |
 
 For full request/response examples, see the [API Documentation](docs/api.md).
 
@@ -849,6 +958,17 @@ repository_url / branch / folder_path
 auth_token (encrypted)
 is_enabled
 sync_status / last_synced_at / sync_error
+
+managed_networks                     resource_networks
+----------------                     -----------------
+id / uuid                            id
+docker_network_name (unique w/ srv)  resource_type / resource_id (morph)
+server_id (FK)                       managed_network_id (FK)
+team_id / project_id / env_id        is_auto_attached / is_connected
+scope (environment/shared/proxy)     connected_at / aliases (JSON)
+driver / status / docker_id
+is_proxy_network / is_attachable
+is_encrypted_overlay / options
 ```
 
 For the full architecture document including flow diagrams, security considerations, and extensibility points, see [Architecture](docs/architecture.md).
@@ -860,6 +980,7 @@ Each feature has detailed documentation under `docs/features/<feature-name>/`:
 | Feature | Folder | Contents |
 |---------|--------|----------|
 | Enhanced Database Classification | [`docs/features/enhanced-database-classification/`](docs/features/enhanced-database-classification/) | PRD, implementation plan, feature overview |
+| Network Management | [`docs/features/network-management/`](docs/features/network-management/) | PRD, implementation plan, feature overview |
 
 Each feature folder contains:
 - **PRD.md** — Product Requirements Document (problem, goals, design, rationale, risks)

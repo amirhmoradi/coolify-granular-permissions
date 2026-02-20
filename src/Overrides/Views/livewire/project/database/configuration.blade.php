@@ -34,6 +34,11 @@
                 <a class="sub-menu-item" {{ wireNavigate() }} wire:current.exact="menu-item-active"
                     href="{{ route('project.database.resource-backups', ['project_uuid' => $project->uuid, 'environment_uuid' => $environment->uuid, 'database_uuid' => $database->uuid]) }}"><span class="menu-item-label">Resource Backups</span></a>
             @endif
+            {{-- Coolify Enhanced: Networks sidebar item --}}
+            @if (config('coolify-enhanced.enabled', false) && config('coolify-enhanced.network_management.enabled', false))
+                <a class="sub-menu-item" {{ wireNavigate() }} wire:current.exact="menu-item-active"
+                    href="{{ route('project.database.networks', ['project_uuid' => $project->uuid, 'environment_uuid' => $environment->uuid, 'database_uuid' => $database->uuid]) }}"><span class="menu-item-label">Networks</span></a>
+            @endif
             <a class='sub-menu-item' {{ wireNavigate() }} wire:current.exact="menu-item-active"
                 href="{{ route('project.database.danger', ['project_uuid' => $project->uuid, 'environment_uuid' => $environment->uuid, 'database_uuid' => $database->uuid]) }}"><span class="menu-item-label">Danger Zone</span></a>
         </div>
@@ -77,6 +82,13 @@
             {{-- Coolify Enhanced: Resource Backups content --}}
             @elseif ($currentRoute === 'project.database.resource-backups')
                 @livewire('enhanced::resource-backup-manager', [
+                    'resourceId' => $database->id,
+                    'resourceType' => get_class($database),
+                    'resourceName' => $database->name,
+                ])
+            {{-- Coolify Enhanced: Networks content --}}
+            @elseif ($currentRoute === 'project.database.networks')
+                @livewire('enhanced::resource-networks', [
                     'resourceId' => $database->id,
                     'resourceType' => get_class($database),
                     'resourceName' => $database->name,

@@ -3,10 +3,14 @@
 namespace AmirhMoradi\CoolifyEnhanced;
 
 use AmirhMoradi\CoolifyEnhanced\Http\Middleware\InjectPermissionsUI;
+use AmirhMoradi\CoolifyEnhanced\Jobs\NetworkReconcileJob;
+use AmirhMoradi\CoolifyEnhanced\Models\ManagedNetwork;
 use AmirhMoradi\CoolifyEnhanced\Scopes\EnvironmentPermissionScope;
 use AmirhMoradi\CoolifyEnhanced\Scopes\ProjectPermissionScope;
+use AmirhMoradi\CoolifyEnhanced\Services\NetworkService;
 use AmirhMoradi\CoolifyEnhanced\Services\PermissionService;
 use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
@@ -64,6 +68,11 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
         // Register template source auto-sync scheduler
         $this->registerTemplateSyncScheduler();
 
+        // Register network management if enabled
+        if (config('coolify-enhanced.network_management.enabled', false)) {
+            $this->registerNetworkManagement();
+        }
+
         // Defer policy registration to AFTER all service providers have booted.
         //
         // Laravel boots package providers BEFORE application providers.
@@ -116,6 +125,27 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
         Livewire::component(
             'enhanced::custom-template-sources',
             \AmirhMoradi\CoolifyEnhanced\Livewire\CustomTemplateSources::class
+        );
+
+        // Network management components
+        Livewire::component(
+            'enhanced::network-manager',
+            \AmirhMoradi\CoolifyEnhanced\Livewire\NetworkManager::class
+        );
+
+        Livewire::component(
+            'enhanced::network-manager-page',
+            \AmirhMoradi\CoolifyEnhanced\Livewire\NetworkManagerPage::class
+        );
+
+        Livewire::component(
+            'enhanced::resource-networks',
+            \AmirhMoradi\CoolifyEnhanced\Livewire\ResourceNetworks::class
+        );
+
+        Livewire::component(
+            'enhanced::network-settings',
+            \AmirhMoradi\CoolifyEnhanced\Livewire\NetworkSettings::class
         );
     }
 
@@ -205,6 +235,153 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
     }
 
     /**
+     * Register network management: deployment observers for post-deployment
+     * network assignment and resource deletion cleanup.
+     *
+     * Phase 3: Uses ApplicationDeploymentQueue model observer for precise
+     * application reconciliation, and team-based lookup for services/databases
+     * since Coolify's events only carry teamId/userId (not the resource).
+     */
+    protected function registerNetworkManagement(): void
+    {
+        $this->app->booted(function () {
+            $delay = config('coolify-enhanced.network_management.post_deploy_delay', 3);
+
+            // Application deployment: observe ApplicationDeploymentQueue status changes
+            // This is the most precise trigger — fires when a specific deployment completes.
+            if (class_exists(\App\Models\ApplicationDeploymentQueue::class)) {
+                \App\Models\ApplicationDeploymentQueue::updated(function ($queue) use ($delay) {
+                    // Only trigger on status transition to 'finished'
+                    if ($queue->isDirty('status') && $queue->status === 'finished') {
+                        try {
+                            $application = $queue->application;
+                            if ($application) {
+                                NetworkReconcileJob::dispatch($application)
+                                    ->delay(now()->addSeconds($delay));
+                            }
+                        } catch (\Throwable $e) {
+                            \Illuminate\Support\Facades\Log::warning('NetworkManagement: Failed to dispatch reconcile for deployment', [
+                                'deployment_uuid' => $queue->deployment_uuid ?? null,
+                                'error' => $e->getMessage(),
+                            ]);
+                        }
+                    }
+                });
+            }
+
+            // Service status changes: Coolify's event carries only teamId
+            // Find all services in the team and reconcile them
+            if (class_exists('App\Events\ServiceStatusChanged')) {
+                Event::listen('App\Events\ServiceStatusChanged', function ($event) use ($delay) {
+                    $teamId = $event->teamId ?? null;
+                    if (! $teamId) {
+                        return;
+                    }
+
+                    try {
+                        $services = \App\Models\Service::whereHas('environment.project.team', function ($q) use ($teamId) {
+                            $q->where('id', $teamId);
+                        })->get();
+
+                        foreach ($services as $service) {
+                            NetworkReconcileJob::dispatch($service)
+                                ->delay(now()->addSeconds($delay));
+                        }
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('NetworkManagement: Failed to dispatch reconcile for services', [
+                            'team_id' => $teamId,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                });
+            }
+
+            // Database status changes: Coolify's event carries only userId
+            // Find the user's team and reconcile all databases
+            if (class_exists('App\Events\DatabaseStatusChanged')) {
+                Event::listen('App\Events\DatabaseStatusChanged', function ($event) use ($delay) {
+                    $userId = $event->userId ?? null;
+                    if (! $userId) {
+                        return;
+                    }
+
+                    try {
+                        $user = \App\Models\User::find($userId);
+                        $team = $user?->currentTeam();
+                        if (! $team) {
+                            return;
+                        }
+
+                        // Reconcile all standalone database types in this team
+                        $databaseClasses = [
+                            \App\Models\StandalonePostgresql::class,
+                            \App\Models\StandaloneMysql::class,
+                            \App\Models\StandaloneMariadb::class,
+                            \App\Models\StandaloneMongodb::class,
+                            \App\Models\StandaloneRedis::class,
+                            \App\Models\StandaloneKeydb::class,
+                            \App\Models\StandaloneDragonfly::class,
+                            \App\Models\StandaloneClickhouse::class,
+                        ];
+
+                        foreach ($databaseClasses as $dbClass) {
+                            if (! class_exists($dbClass)) {
+                                continue;
+                            }
+
+                            $databases = $dbClass::whereHas('environment.project.team', function ($q) use ($team) {
+                                $q->where('id', $team->id);
+                            })->get();
+
+                            foreach ($databases as $database) {
+                                NetworkReconcileJob::dispatch($database)
+                                    ->delay(now()->addSeconds($delay));
+                            }
+                        }
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('NetworkManagement: Failed to dispatch reconcile for databases', [
+                            'user_id' => $userId,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                });
+            }
+
+            // Cleanup on resource deletion
+            if (class_exists(\App\Models\Application::class)) {
+                \App\Models\Application::deleting(function ($application) {
+                    NetworkService::autoDetachResource($application);
+                });
+            }
+
+            if (class_exists(\App\Models\Service::class)) {
+                \App\Models\Service::deleting(function ($service) {
+                    NetworkService::autoDetachResource($service);
+                });
+            }
+
+            // Standalone database deletion cleanup
+            $databaseModels = [
+                \App\Models\StandalonePostgresql::class,
+                \App\Models\StandaloneMysql::class,
+                \App\Models\StandaloneMariadb::class,
+                \App\Models\StandaloneMongodb::class,
+                \App\Models\StandaloneRedis::class,
+                \App\Models\StandaloneKeydb::class,
+                \App\Models\StandaloneDragonfly::class,
+                \App\Models\StandaloneClickhouse::class,
+            ];
+            foreach ($databaseModels as $modelClass) {
+                if (class_exists($modelClass)) {
+                    $modelClass::deleting(function ($database) {
+                        NetworkService::autoDetachResource($database);
+                    });
+                }
+            }
+        });
+    }
+
+    /**
      * Override Coolify's default policies with permission-aware versions.
      *
      * Coolify's own policies (as of v4) return true for all operations.
@@ -232,6 +409,9 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
 
             // Sub-resource policies (Coolify's defaults return true for everything)
             \App\Models\EnvironmentVariable::class => \AmirhMoradi\CoolifyEnhanced\Policies\EnvironmentVariablePolicy::class,
+
+            // Network management policy
+            ManagedNetwork::class => \AmirhMoradi\CoolifyEnhanced\Policies\NetworkPolicy::class,
         ];
 
         foreach ($policies as $model => $policy) {

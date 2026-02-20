@@ -1,6 +1,8 @@
 <?php
 
 use AmirhMoradi\CoolifyEnhanced\Livewire\CustomTemplateSources;
+use AmirhMoradi\CoolifyEnhanced\Livewire\NetworkManager;
+use AmirhMoradi\CoolifyEnhanced\Livewire\NetworkSettings;
 use AmirhMoradi\CoolifyEnhanced\Livewire\ResourceBackupPage;
 use AmirhMoradi\CoolifyEnhanced\Livewire\RestoreBackup;
 use Illuminate\Support\Facades\Route;
@@ -53,4 +55,30 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     // Settings: Custom Template Sources page
     Route::get('settings/custom-templates', CustomTemplateSources::class)
         ->name('settings.custom-templates');
+
+    // Server: Networks management page
+    Route::get(
+        'server/{server_uuid}/networks',
+        \AmirhMoradi\CoolifyEnhanced\Livewire\NetworkManagerPage::class
+    )->name('server.networks');
+
+    // Resource: Networks sub-page (rendered inside Configuration via overlay)
+    Route::get(
+        'project/{project_uuid}/environment/{environment_uuid}/application/{application_uuid}/networks',
+        \App\Livewire\Project\Application\Configuration::class
+    )->name('project.application.networks');
+
+    Route::get(
+        'project/{project_uuid}/environment/{environment_uuid}/database/{database_uuid}/networks',
+        \App\Livewire\Project\Database\Configuration::class
+    )->name('project.database.networks');
+
+    Route::get(
+        'project/{project_uuid}/environment/{environment_uuid}/service/{service_uuid}/networks',
+        \App\Livewire\Project\Service\Configuration::class
+    )->name('project.service.networks');
+
+    // Settings: Network management page
+    Route::get('settings/networks', NetworkSettings::class)
+        ->name('settings.networks');
 });

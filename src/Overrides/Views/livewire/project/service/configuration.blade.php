@@ -29,6 +29,11 @@
                 <a class="sub-menu-item" wire:current.exact="menu-item-active" {{ wireNavigate() }}
                     href="{{ route('project.service.resource-backups', ['project_uuid' => $project->uuid, 'environment_uuid' => $environment->uuid, 'service_uuid' => $service->uuid]) }}"><span class="menu-item-label">Resource Backups</span></a>
             @endif
+            {{-- Coolify Enhanced: Networks sidebar item --}}
+            @if (config('coolify-enhanced.enabled', false) && config('coolify-enhanced.network_management.enabled', false))
+                <a class="sub-menu-item" wire:current.exact="menu-item-active" {{ wireNavigate() }}
+                    href="{{ route('project.service.networks', ['project_uuid' => $project->uuid, 'environment_uuid' => $environment->uuid, 'service_uuid' => $service->uuid]) }}"><span class="menu-item-label">Networks</span></a>
+            @endif
 
             <a class='sub-menu-item' wire:current.exact="menu-item-active" {{ wireNavigate() }}
                 href="{{ route('project.service.danger', ['project_uuid' => $project->uuid, 'environment_uuid' => $environment->uuid, 'service_uuid' => $service->uuid]) }}"><span class="menu-item-label">Danger Zone</span></a>
@@ -204,6 +209,13 @@
             {{-- Coolify Enhanced: Resource Backups content --}}
             @elseif ($currentRoute === 'project.service.resource-backups')
                 @livewire('enhanced::resource-backup-manager', [
+                    'resourceId' => $service->id,
+                    'resourceType' => get_class($service),
+                    'resourceName' => $service->name,
+                ])
+            {{-- Coolify Enhanced: Networks content --}}
+            @elseif ($currentRoute === 'project.service.networks')
+                @livewire('enhanced::resource-networks', [
                     'resourceId' => $service->id,
                     'resourceType' => get_class($service),
                     'resourceName' => $service->name,

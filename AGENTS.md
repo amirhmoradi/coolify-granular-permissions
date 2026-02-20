@@ -20,8 +20,31 @@ This is a **Laravel package** that extends Coolify v4 with:
 3. **Resource Backups** — Volume, configuration, and full backups for Applications, Services, and Databases
 4. **Custom Template Sources** — External GitHub repositories as sources for docker-compose service templates
 5. **Enhanced Database Classification** — Expanded database image detection, `coolify.database` Docker label, `# type: database` comment convention, wire-compatible backup support, and expanded port mapping
+6. **Network Management** — Per-environment Docker network isolation, shared networks, dedicated proxy network, server-level management UI, per-resource network assignment, and Docker Swarm overlay support
 
-It does NOT modify Coolify directly but extends it via Laravel's service provider and policy override system. For encryption, backup, classification, and template features, modified Coolify files are overlaid in the Docker image.
+It does NOT modify Coolify directly but extends it via Laravel's service provider and policy override system. For encryption, backup, classification, template, and network features, modified Coolify files are overlaid in the Docker image.
+
+### Network Management Architecture
+
+Network management uses a post-deployment hook approach — zero overlay files for Phase 1 (environment isolation), two small overlays for Phase 2 (proxy isolation: `proxy.php` + `docker.php`), and zero new overlays for Phase 3 (Swarm support).
+
+**Key files:**
+- `src/Services/NetworkService.php` — Core engine (Docker CRUD, reconciliation, Swarm)
+- `src/Jobs/NetworkReconcileJob.php` — Post-deployment network assignment
+- `src/Jobs/ProxyMigrationJob.php` — Proxy isolation migration
+- `src/Models/ManagedNetwork.php` — Network model (environment, shared, proxy, system scopes)
+- `src/Models/ResourceNetwork.php` — Polymorphic resource-to-network pivot
+- `src/Overrides/Helpers/proxy.php` — Phase 2: proxy compose network integration
+- `src/Overrides/Helpers/docker.php` — Phase 2: `traefik.docker.network` label injection
+
+**Critical patterns:**
+- All shell commands use `escapeshellarg()` for interpolated values
+- Network creation verified via post-creation inspection before marking ACTIVE
+- Overlay blocks triple-guarded: `coolify-enhanced.enabled` + `network_management.enabled` + `proxy_isolation`
+- Swarm manager validation before overlay network creation
+- Network limit enforced in auto-provisioning (ensureEnvironmentNetwork, ensureProxyNetwork)
+
+See `docs/features/network-management/` for PRD, implementation plan, and feature overview.
 
 ### Key Characteristics
 
