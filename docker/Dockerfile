@@ -36,9 +36,17 @@ RUN composer config repositories.coolify-enhanced path /tmp/coolify-enhanced && 
 # on an S3 destination, they fall back to the original behavior.
 # =================================================================
 
-# Override DatabaseBackupJob with encryption-aware version
+# Override DatabaseBackupJob with encryption-aware + classification-aware version
 COPY --chown=www-data:www-data src/Overrides/Jobs/DatabaseBackupJob.php \
     /var/www/html/app/Jobs/DatabaseBackupJob.php
+
+# Override StartDatabaseProxy with expanded database port mapping
+COPY --chown=www-data:www-data src/Overrides/Actions/Database/StartDatabaseProxy.php \
+    /var/www/html/app/Actions/Database/StartDatabaseProxy.php
+
+# Override ServiceDatabase model with wire-compatible database type mappings
+COPY --chown=www-data:www-data src/Overrides/Models/ServiceDatabase.php \
+    /var/www/html/app/Models/ServiceDatabase.php
 
 # Override Import Livewire component with encryption-aware version
 COPY --chown=www-data:www-data src/Overrides/Livewire/Project/Database/Import.php \
@@ -89,6 +97,14 @@ COPY --chown=www-data:www-data src/Overrides/Helpers/proxy.php \
 # Override docker helper for Traefik/Caddy proxy network label injection (Phase 2)
 COPY --chown=www-data:www-data src/Overrides/Helpers/docker.php \
     /var/www/html/bootstrap/helpers/docker.php
+
+# Override Service/Index Livewire component with multi-port proxy support
+COPY --chown=www-data:www-data src/Overrides/Livewire/Project/Service/Index.php \
+    /var/www/html/app/Livewire/Project/Service/Index.php
+
+# Override service index view with multi-port proxy UI
+COPY --chown=www-data:www-data src/Overrides/Views/livewire/project/service/index.blade.php \
+    /var/www/html/resources/views/livewire/project/service/index.blade.php
 
 # Override New Resource select view to show custom template source labels
 COPY --chown=www-data:www-data src/Overrides/Views/livewire/project/new/select.blade.php \

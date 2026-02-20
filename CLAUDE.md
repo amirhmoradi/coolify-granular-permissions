@@ -7,9 +7,11 @@ This file provides guidance to **Claude Code** and other AI assistants when work
 ## Mandatory Rules for AI Agents
 
 1. **Keep documentation updated** - After every significant code change, update CLAUDE.md and AGENTS.md with new learnings, patterns, and pitfalls discovered during implementation.
-2. **Pull Coolify source on each prompt** - At the start of each session, run `git -C docs/coolify-source pull` to ensure the Coolify reference source is up to date. If the directory doesn't exist, clone it: `git clone --depth 1 https://github.com/coollabsio/coolify.git docs/coolify-source`.
-3. **Browse Coolify source for context** - When working on policies, authorization, or UI integration, always reference the Coolify source under `docs/coolify-source/` to understand how Coolify implements things natively.
-4. **Read before writing** - Always read existing files before modifying them. Understand the current state before making changes.
+2. **Update all documentation on every feature/modification** - Every new feature, modification, or bug fix **must** include updates to: (a) **README.md** — user-facing documentation so users know how to use and configure the feature, (b) **AGENTS.md** — technical details for AI agents including architecture, overlay files, and pitfalls, (c) **CLAUDE.md** — architecture knowledge, package structure, key files, and common pitfalls, (d) **docs/** files — relevant documentation files (e.g., `docs/custom-templates.md` for template-related changes). Do not consider a feature complete until documentation is updated.
+3. **Create feature documentation** - Every new feature **must** have a dedicated folder under `docs/features/<feature-name>/` containing at minimum: (a) **PRD.md** — Product Requirements Document with problem statement, goals, solution design, technical decisions with rationale, user experience, files modified, risks, and testing checklist, (b) **plan.md** — Technical implementation plan with code snippets, file changes, and architecture details, (c) **README.md** — Feature overview, components, file list, and links to related docs. Feature documentation should be created before or during implementation and updated as the feature evolves. Use kebab-case for folder names (e.g., `enhanced-database-classification`).
+4. **Pull Coolify source on each prompt** - At the start of each session, run `git -C docs/coolify-source pull` to ensure the Coolify reference source is up to date. If the directory doesn't exist, clone it: `git clone --depth 1 https://github.com/coollabsio/coolify.git docs/coolify-source`.
+5. **Browse Coolify source for context** - When working on policies, authorization, or UI integration, always reference the Coolify source under `docs/coolify-source/` to understand how Coolify implements things natively.
+6. **Read before writing** - Always read existing files before modifying them. Understand the current state before making changes.
 
 ## Project Overview
 
@@ -128,6 +130,11 @@ Coolify classifies service containers as `ServiceDatabase` or `ServiceApplicatio
 - **`# type: database` comment convention**: Template authors can add `# type: database` (or `# type: application`) as a metadata header. During parsing, this injects `coolify.database` labels into all services in the compose YAML (unless a service already has the label explicitly)
 - **Per-service granularity**: The `coolify.database` label is per-container, so multi-service templates can have mixed classifications (e.g., memgraph=database + memgraph-lab=application)
 - **No docker.php overlay needed**: The wrapper approach in `shared.php` covers the two critical call sites (service import and deployment) without overlaying the 1483-line `docker.php` file. The `is_migrated` flag preserves the initial classification for re-parses
+- **StartDatabaseProxy overlay**: Expanded port mapping for ~50 database types in `StartDatabaseProxy.php`. Falls back to extracting port from compose config for truly unknown types. Fixes "Unsupported database type" error when toggling "Make Publicly Available"
+- **DatabaseBackupJob overlay**: Replaces silent skips and generic exceptions with meaningful error messages for unsupported database types, guiding users to set `custom_type` or use Resource Backups
+- **ServiceDatabase model overlay**: Maps wire-compatible databases to their parent backup type in `databaseType()`: YugabyteDB→postgresql, TiDB→mysql, FerretDB→mongodb, Percona→mysql, Apache AGE→postgresql. This automatically enables backup UI, dump-based backups, import UI, and correct port mapping for these databases
+- **Multi-port database proxy**: `coolify.proxyPorts` Docker label convention (e.g., `"7687:bolt,7444:log-viewer"`) enables proxying multiple TCP ports for a single ServiceDatabase container. Stored in `proxy_ports` JSON column on `service_databases` table. Service/Index.php Livewire overlay detects the label from `docker_compose_raw` and renders per-port toggle/public-port UI. `StartDatabaseProxy` generates multiple nginx `stream` server blocks. Falls back to single-port UI when label is absent
+- **parsers.php NOT overlaid**: The 2484-line parsers.php is not overlaid. Its `isDatabaseImage()` calls don't use our label check, but existing ServiceDatabase records are preserved during re-parse (code checks for existing records before creating new ones). The expanded DATABASE_DOCKER_IMAGES covers most cases at the `isDatabaseImage()` level anyway
 
 ### Network Management Architecture
 
@@ -205,10 +212,16 @@ coolify-enhanced/
 │   │   ├── ProjectPermissionScope.php
 │   │   └── EnvironmentPermissionScope.php
 │   ├── Overrides/                             # Modified Coolify files (overlay)
+│   │   ├── Actions/Database/
+│   │   │   └── StartDatabaseProxy.php         # Expanded database port mapping
+│   │   ├── Models/
+│   │   │   └── ServiceDatabase.php            # Wire-compatible type mappings
 │   │   ├── Jobs/
-│   │   │   └── DatabaseBackupJob.php          # Encryption-aware backup job
+│   │   │   └── DatabaseBackupJob.php          # Encryption + classification-aware backup
 │   │   ├── Livewire/Project/Database/
 │   │   │   └── Import.php                     # Encryption-aware restore
+│   │   ├── Livewire/Project/Service/
+│   │   │   └── Index.php                      # Multi-port proxy support
 │   │   ├── Views/
 │   │   │   ├── livewire/storage/
 │   │   │   │   └── show.blade.php             # Storage page with encryption form
@@ -218,6 +231,7 @@ coolify-enhanced/
 │   │   │   ├── livewire/project/database/
 │   │   │   │   └── configuration.blade.php    # DB config + Resource Backups sidebar
 │   │   │   ├── livewire/project/service/
+│   │   │   │   ├── index.blade.php            # Service DB view with multi-port proxy UI
 │   │   │   │   └── configuration.blade.php    # Service config + Resource Backups sidebar
 │   │   │   ├── livewire/project/new/
 │   │   │   │   └── select.blade.php         # New Resource page + custom source labels
@@ -272,6 +286,11 @@ coolify-enhanced/
 ├── docker/                                     # Docker build files
 ├── docs/
 │   ├── custom-templates.md                    # Custom template creation guide
+│   ├── features/                              # Per-feature documentation
+│   │   └── enhanced-database-classification/  # Database classification + multi-port proxy
+│   │       ├── PRD.md                         # Product Requirements Document
+│   │       ├── plan.md                        # Technical implementation plan
+│   │       └── README.md                      # Feature overview
 │   ├── examples/
 │   │   └── whoami.yaml                        # Example custom template
 │   └── coolify-source/                        # Cloned Coolify source (gitignored)
@@ -295,7 +314,11 @@ coolify-enhanced/
 | `src/Models/ScheduledResourceBackup.php` | Resource backup schedule model |
 | `src/Models/ScheduledResourceBackupExecution.php` | Resource backup execution tracking |
 | `src/Http/Controllers/Api/ResourceBackupController.php` | Resource backup REST API |
-| `src/Overrides/Jobs/DatabaseBackupJob.php` | Encryption + path prefix aware backup job overlay |
+| `src/Overrides/Jobs/DatabaseBackupJob.php` | Encryption + path prefix + classification-aware backup job overlay |
+| `src/Overrides/Actions/Database/StartDatabaseProxy.php` | Expanded database port mapping for "Make Publicly Available" |
+| `src/Overrides/Models/ServiceDatabase.php` | Wire-compatible database type mappings + multi-port proxy support |
+| `src/Overrides/Livewire/Project/Service/Index.php` | Service DB view overlay with multi-port proxy logic |
+| `src/Overrides/Views/livewire/project/service/index.blade.php` | Service DB view with multi-port proxy UI |
 | `src/Overrides/Livewire/Project/Database/Import.php` | Encryption-aware restore overlay |
 | `src/Overrides/Helpers/constants.php` | Expanded DATABASE_DOCKER_IMAGES with 50+ additional database images |
 | `src/Overrides/Helpers/databases.php` | Encryption-aware S3 delete overlay |
@@ -392,6 +415,7 @@ Two approaches are used to add UI components to Coolify pages:
   - **Resource Configuration** (`project/application/configuration.blade.php`, etc.) — adds "Resource Backups" sidebar item + `@elseif` content section that renders `enhanced::resource-backup-manager`
   - **Server Sidebar** (`components/server/sidebar.blade.php`) — adds "Resource Backups" sidebar item
   - **Settings Navbar** (`components/settings/navbar.blade.php`) — adds "Restore" tab linking to restore/import page
+  - **Service Index** (`project/service/index.blade.php`) — multi-port proxy UI for ServiceDatabase with `coolify.proxyPorts` label
   - **New Resource Select** (`project/new/select.blade.php`) — adds custom template source name labels on service cards
 
 **Why view overlays for backups?** The configuration pages use `$currentRoute` to conditionally render content. Adding a sidebar item requires both the `<a>` link in the sidebar AND an `@elseif` branch in the content area. This can only be done in the Blade view — not via middleware or JavaScript. The backup manager component (`enhanced::resource-backup-manager`) needs proper Livewire hydration, which requires native rendering in the view.
@@ -440,29 +464,41 @@ Two approaches are used to add UI components to Coolify pages:
 36. **`constants.php` overlay maintenance** — Keep the expanded `DATABASE_DOCKER_IMAGES` list in sync with Coolify upstream. The overlay is a full copy of the original file with additional entries grouped by database category. New entries should be added to the appropriate category section.
 37. **`# type: database` injects labels into compose** — The comment header modifies the actual YAML (adds `coolify.database` label to all services), which is then base64-encoded. This means the label persists into `docker_compose_raw` in the DB, ensuring classification survives re-parses. Per-service labels take precedence over the template-level `# type:` header.
 38. **Label check is case-insensitive** — `isDatabaseImageEnhanced()` lowercases the label key before matching. Boolean parsing uses PHP's `filter_var(FILTER_VALIDATE_BOOLEAN)`, which accepts `true/false/1/0/yes/no/on/off`.
-39. **Network management uses post-deployment hooks, not overlays** — The `NetworkReconcileJob` runs after Coolify finishes its normal deployment. Containers are connected to managed networks via `docker network connect`. This avoids overlaying `ApplicationDeploymentJob.php` (4130 lines, 16+ network references).
-40. **Network race conditions** — Docker's `network create` and `network connect` are idempotent with `2>/dev/null || true`. DB unique constraints on `(docker_network_name, server_id)` handle concurrent `firstOrCreate` calls. The second caller catches the unique violation and fetches the existing record.
-41. **Strict isolation disconnects from `coolify` network** — In `strict` mode, resources are disconnected from the default `coolify` Docker network after being connected to their environment network. This breaks services that rely on the default network for inter-container communication. Only use if all services are properly assigned to managed networks.
-42. **Network event listeners** — The system listens for `ApplicationStatusChanged`, `ServiceStatusChanged`, and `DatabaseStatusChanged` events. If Coolify changes event signatures or adds new events, update `registerNetworkManagement()` in the service provider.
-43. **Shared networks are for cross-environment communication** — Resources from different environments cannot communicate by default (separate bridge networks). Users must create shared networks and manually attach resources to enable cross-env connectivity.
-44. **Network limit per server** — Default 200. Docker bridge networks consume iptables rules (~10 per network). At 200+ networks, `iptables -L` performance degrades. The limit is configurable via `COOLIFY_MAX_NETWORKS` env var.
-45. **PR preview deployments do NOT auto-join environment networks** — Preview deploys create their own `{app_uuid}-{pr_id}` network. The reconcile job only triggers for the main resource, not PR previews. This is intentional: previews should not access production databases.
-46. **`traefik.docker.network` is NOT optional for multi-network setups** — Without it, Traefik randomly selects which network IP to route to, causing intermittent 502 errors that depend on Docker's internal network ordering (changes on restart). Phase 2's proxy isolation overlay injects this label automatically.
-47. **Proxy network label is dynamic, not DB-stored** — The proxy network name is resolved at label generation time from `ManagedNetwork` table, not stored in the resource's `custom_labels`. This prevents stale labels when resources move between servers.
-48. **proxy.php overlay covers 4 functions** — `connectProxyToNetworks()`, `collectDockerNetworksByServer()`, `generateDefaultProxyConfiguration()`, `ensureProxyNetworksExist()`. Each has a `[PROXY ISOLATION OVERLAY]` marked block guarded by dual config check (`proxy_isolation` + `enabled`).
-49. **docker.php overlay covers 3 functions** — `fqdnLabelsForTraefik()` (+optional `$proxyNetwork` param), `fqdnLabelsForCaddy()` (+optional `$proxyNetwork` param), `generateLabelsApplication()` (+proxy network resolution). All marked with `[PROXY ISOLATION OVERLAY]`.
-50. **parsers.php is NOT overlaid** — Its 8 `fqdnLabelsFor*` calls don't pass `proxyNetwork`. Post-deployment reconciliation via `NetworkReconcileJob` ensures containers join the proxy network anyway.
-51. **Proxy migration is a 2-step process** — Step 1: Run "Proxy Migration" (creates network, connects proxy + FQDN resources). Step 2: After ALL resources redeployed, optionally "Cleanup Old Networks" to disconnect proxy from non-proxy networks.
-52. **Default network kept during migration** — `connectProxyToNetworks()` always includes the default `coolify`/`coolify-overlay` network alongside proxy networks, ensuring backward compatibility until migration is complete.
-53. **Coolify events don't carry resources** — `ApplicationStatusChanged($teamId)`, `ServiceStatusChanged($teamId)`, and `DatabaseStatusChanged($userId)` only carry team/user IDs, NOT the actual resource. The event listener fix uses `ApplicationDeploymentQueue::updated()` for precise application reconciliation, and team-based lookup for services/databases.
-54. **Swarm uses `docker service update --network-add`** — Unlike standalone Docker where `docker network connect` works on running containers, Swarm tasks cannot be directly connected to networks. The `docker service update --network-add` command modifies the service spec, triggering a zero-downtime rolling update.
-55. **Overlay networks require manager node** — Network creation (`docker network create --driver overlay`) must be executed on a Swarm manager node. `isSwarmManager()` checks this.
-56. **`resolveNetworkDriver()` auto-detects driver** — All `ensure*Network()` methods use `resolveNetworkDriver($server)` to return `overlay` for Swarm, `bridge` for standalone. No hardcoded driver values.
-57. **Swarm service name discovery** — `getSwarmServiceNames()` uses `docker service ls` with `--filter` to discover service names. Falls back to UUID-based name matching.
-58. **Batched Swarm network changes** — `updateSwarmServiceNetworks()` combines multiple `--network-add` and `--network-rm` flags into a single `docker service update` command, triggering only one rolling update per service.
-59. **Overlay encryption adds IPsec overhead** — `--opt encrypted` enables IPsec encryption between Swarm nodes (~5-10% overhead). Configured via `COOLIFY_SWARM_OVERLAY_ENCRYPTION=true`. Applied during network creation, not retroactively.
-60. **Strict mode uses `coolify-overlay` for Swarm** — When disconnecting from the default network in strict mode, use `coolify-overlay` (Swarm) instead of `coolify` (standalone). `getDefaultNetworkName()` handles this.
-61. **Phase 3 adds zero new overlay files** — All Swarm support is in `NetworkService.php`, `NetworkReconcileJob.php`, and updates to existing overlays. The `proxy.php` overlay's Swarm branches were updated but no new overlays were created.
+39. **StartDatabaseProxy port resolution** — The overlay first tries Coolify's built-in match, then looks up the base image name in `DATABASE_PORT_MAP`, then tries partial string matching, then extracts port from the service's compose config. Only throws if all methods fail. The error message guides users to set `custom_type`.
+40. **`ServiceDatabase::databaseType()` includes full image path** — For `memgraph/memgraph-mage`, it returns `standalone-memgraph/memgraph-mage` (not just `standalone-memgraph-mage`). The port resolution in `StartDatabaseProxy` handles this by extracting the base name via `afterLast('/')`.
+41. **DatabaseBackupJob unsupported types** — Dump-based backups only work for postgres, mysql, mariadb, and mongodb. For other ServiceDatabase types (memgraph, redis, clickhouse, etc.), the job now throws a meaningful exception instead of silently returning. Users should either set `custom_type` (if the DB is wire-compatible) or use Resource Backups for volume-level backups.
+42. **Wire-compatible mapping is conservative** — Only databases where standard dump tools produce CORRECT backups are mapped: YugabyteDB (pg_dump), TiDB (mysqldump), FerretDB (mongodump), Percona (mysqldump), Apache AGE (pg_dump). CockroachDB is NOT mapped despite speaking pgwire because `pg_dump` fails on its catalog functions. Vitess is NOT mapped because `mysqldump` needs extra flags and isn't reliable for sharded setups. For unmapped types, `isBackupSolutionAvailable()` correctly returns false. Users can set `custom_type` if they know their DB is compatible, or use Resource Backups.
+43. **ServiceDatabase.php overlay maintenance** — The model is small (170 lines) but critical. The wire-compatible mappings in `databaseType()` use `$image->contains()` checks — be careful with substring false positives (e.g., `age` matching `garage` or `image` — the AGE check excludes these).
+44. **parsers.php preserves existing records** — Even without our label check, `updateCompose()` in parsers.php first checks for existing ServiceApplication/ServiceDatabase records and preserves them. Re-classification only affects truly NEW services added during a compose update, and the expanded DATABASE_DOCKER_IMAGES handles most of those.
+45. **Multi-port proxy label format** — `coolify.proxyPorts` label value is `"internalPort:label,internalPort:label,..."` (e.g., `"7687:bolt,7444:log-viewer"`). Parsed by `ServiceDatabase::parseProxyPortsLabel()`. The label name is case-sensitive (lowercase `coolify.proxyPorts`).
+46. **Multi-port proxy coexistence** — When `coolify.proxyPorts` label is absent, the Service/Index.php overlay behaves identically to stock Coolify (single `is_public`/`public_port` toggle). The multi-port UI only appears when the label is detected in `docker_compose_raw`.
+47. **Multi-port proxy_ports JSON schema** — `service_databases.proxy_ports` stores `{"7687": {"public_port": 17687, "label": "bolt", "enabled": true}, ...}`. Keys are internal port strings. Initialized from the label's defaults on first component mount.
+48. **Service/Index.php overlay maintenance** — Full copy of Coolify's `app/Livewire/Project/Service/Index.php` (~560 lines). Multi-port additions are marked with `[MULTI-PORT PROXY OVERLAY]` comments. Must be kept in sync with upstream changes to the original component.
+49. **Multi-port proxy nginx config** — `StartDatabaseProxy::handleMultiPort()` generates multiple `server` blocks in a single nginx `stream` context. Each server block listens on its own public port and proxy_passes to the container's internal port. All ports share one proxy container.
+50. **Multi-port StopDatabaseProxy** — No changes needed. `StopDatabaseProxy` simply does `docker rm -f {uuid}-proxy`, which stops the single proxy container handling all ports.
+51. **Network management uses post-deployment hooks, not overlays** — The `NetworkReconcileJob` runs after Coolify finishes its normal deployment. Containers are connected to managed networks via `docker network connect`. This avoids overlaying `ApplicationDeploymentJob.php` (4130 lines, 16+ network references).
+52. **Network race conditions** — Docker's `network create` and `network connect` are idempotent with `2>/dev/null || true`. DB unique constraints on `(docker_network_name, server_id)` handle concurrent `firstOrCreate` calls. The second caller catches the unique violation and fetches the existing record.
+53. **Strict isolation disconnects from `coolify` network** — In `strict` mode, resources are disconnected from the default `coolify` Docker network after being connected to their environment network. This breaks services that rely on the default network for inter-container communication. Only use if all services are properly assigned to managed networks.
+54. **Network event listeners** — The system listens for `ApplicationStatusChanged`, `ServiceStatusChanged`, and `DatabaseStatusChanged` events. If Coolify changes event signatures or adds new events, update `registerNetworkManagement()` in the service provider.
+55. **Shared networks are for cross-environment communication** — Resources from different environments cannot communicate by default (separate bridge networks). Users must create shared networks and manually attach resources to enable cross-env connectivity.
+56. **Network limit per server** — Default 200. Docker bridge networks consume iptables rules (~10 per network). At 200+ networks, `iptables -L` performance degrades. The limit is configurable via `COOLIFY_MAX_NETWORKS` env var.
+57. **PR preview deployments do NOT auto-join environment networks** — Preview deploys create their own `{app_uuid}-{pr_id}` network. The reconcile job only triggers for the main resource, not PR previews. This is intentional: previews should not access production databases.
+58. **`traefik.docker.network` is NOT optional for multi-network setups** — Without it, Traefik randomly selects which network IP to route to, causing intermittent 502 errors that depend on Docker's internal network ordering (changes on restart). Phase 2's proxy isolation overlay injects this label automatically.
+59. **Proxy network label is dynamic, not DB-stored** — The proxy network name is resolved at label generation time from `ManagedNetwork` table, not stored in the resource's `custom_labels`. This prevents stale labels when resources move between servers.
+60. **proxy.php overlay covers 4 functions** — `connectProxyToNetworks()`, `collectDockerNetworksByServer()`, `generateDefaultProxyConfiguration()`, `ensureProxyNetworksExist()`. Each has a `[PROXY ISOLATION OVERLAY]` marked block guarded by dual config check (`proxy_isolation` + `enabled`).
+61. **docker.php overlay covers 3 functions** — `fqdnLabelsForTraefik()` (+optional `$proxyNetwork` param), `fqdnLabelsForCaddy()` (+optional `$proxyNetwork` param), `generateLabelsApplication()` (+proxy network resolution). All marked with `[PROXY ISOLATION OVERLAY]`.
+62. **parsers.php is NOT overlaid** — Its 8 `fqdnLabelsFor*` calls don't pass `proxyNetwork`. Post-deployment reconciliation via `NetworkReconcileJob` ensures containers join the proxy network anyway.
+63. **Proxy migration is a 2-step process** — Step 1: Run "Proxy Migration" (creates network, connects proxy + FQDN resources). Step 2: After ALL resources redeployed, optionally "Cleanup Old Networks" to disconnect proxy from non-proxy networks.
+64. **Default network kept during migration** — `connectProxyToNetworks()` always includes the default `coolify`/`coolify-overlay` network alongside proxy networks, ensuring backward compatibility until migration is complete.
+65. **Coolify events don't carry resources** — `ApplicationStatusChanged($teamId)`, `ServiceStatusChanged($teamId)`, and `DatabaseStatusChanged($userId)` only carry team/user IDs, NOT the actual resource. The event listener fix uses `ApplicationDeploymentQueue::updated()` for precise application reconciliation, and team-based lookup for services/databases.
+66. **Swarm uses `docker service update --network-add`** — Unlike standalone Docker where `docker network connect` works on running containers, Swarm tasks cannot be directly connected to networks. The `docker service update --network-add` command modifies the service spec, triggering a zero-downtime rolling update.
+67. **Overlay networks require manager node** — Network creation (`docker network create --driver overlay`) must be executed on a Swarm manager node. `isSwarmManager()` checks this.
+68. **`resolveNetworkDriver()` auto-detects driver** — All `ensure*Network()` methods use `resolveNetworkDriver($server)` to return `overlay` for Swarm, `bridge` for standalone. No hardcoded driver values.
+69. **Swarm service name discovery** — `getSwarmServiceNames()` uses `docker service ls` with `--filter` to discover service names. Falls back to UUID-based name matching.
+70. **Batched Swarm network changes** — `updateSwarmServiceNetworks()` combines multiple `--network-add` and `--network-rm` flags into a single `docker service update` command, triggering only one rolling update per service.
+71. **Overlay encryption adds IPsec overhead** — `--opt encrypted` enables IPsec encryption between Swarm nodes (~5-10% overhead). Configured via `COOLIFY_SWARM_OVERLAY_ENCRYPTION=true`. Applied during network creation, not retroactively.
+72. **Strict mode uses `coolify-overlay` for Swarm** — When disconnecting from the default network in strict mode, use `coolify-overlay` (Swarm) instead of `coolify` (standalone). `getDefaultNetworkName()` handles this.
+73. **Phase 3 adds zero new overlay files** — All Swarm support is in `NetworkService.php`, `NetworkReconcileJob.php`, and updates to existing overlays. The `proxy.php` overlay's Swarm branches were updated but no new overlays were created.
 
 ## Important Notes
 
@@ -487,6 +523,7 @@ Two approaches are used to add UI components to Coolify pages:
 
 - [AGENTS.md](AGENTS.md) - Detailed AI agent instructions
 - [docs/custom-templates.md](docs/custom-templates.md) - Custom template creation guide
+- [docs/features/](docs/features/) - Per-feature documentation (PRD, plan, README)
 - [docs/coolify-source/](docs/coolify-source/) - Coolify source code reference
 - [docs/architecture.md](docs/architecture.md) - Architecture details
 - [docs/api.md](docs/api.md) - API documentation

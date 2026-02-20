@@ -4,7 +4,7 @@
 [![Build and Publish Docker Image](https://github.com/amirhmoradi/coolify-enhanced/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/amirhmoradi/coolify-enhanced/actions/workflows/docker-publish.yml)
 [![Docker Image](https://img.shields.io/badge/ghcr.io-coolify--enhanced-blue)](https://ghcr.io/amirhmoradi/coolify-enhanced)
 
-**The missing enterprise features for Coolify v4 — granular permissions, encrypted backups, volume/config backups, and custom service templates.**
+**The missing enterprise features for Coolify v4 — granular permissions, encrypted backups, volume/config backups, custom service templates, and enhanced database classification.**
 
 Coolify Enhanced is a drop-in addon for [Coolify](https://coolify.io) that adds the access control, backup security, and template extensibility features that teams need when running Coolify in production. It installs in under 2 minutes, requires zero changes to your existing setup, and can be removed cleanly at any time.
 
@@ -22,8 +22,9 @@ Coolify v4 is an excellent self-hosted PaaS, but ships with a few limitations fo
 | **Backup encryption** | Database backups stored as plaintext on S3 | NaCl SecretBox encryption (XSalsa20 + Poly1305) — military-grade, at rest |
 | **Volume & config backups** | Only database dumps are backed up | Docker volumes, app configuration, and full resource backups on schedule |
 | **Service templates** | Limited to Coolify's built-in 200+ templates | Add unlimited custom templates from any GitHub repository |
+| **Database classification** | Many databases (Memgraph, Milvus, Qdrant, etc.) misclassified as applications | 50+ additional database images recognized; explicit label and comment overrides |
 
-All four features are **independent** — enable only what you need. When disabled, Coolify behaves exactly as stock.
+All five features are **independent** — enable only what you need. When disabled, Coolify behaves exactly as stock.
 
 ---
 
@@ -37,6 +38,7 @@ All four features are **independent** — enable only what you need. When disabl
   - [Encrypted S3 Backups](#2-encrypted-s3-backups)
   - [Resource Backups (Volumes, Config, Full)](#3-resource-backups)
   - [Custom Template Sources](#4-custom-template-sources)
+  - [Enhanced Database Classification](#5-enhanced-database-classification)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [API Reference](#api-reference)
@@ -73,6 +75,14 @@ All four features are **independent** — enable only what you need. When disabl
 - Independent cron scheduling per resource
 - Retention policies (by count, by age, or by storage)
 - Same S3 upload pipeline with optional encryption
+
+### Enhanced Database Classification
+- **50+ additional database images** recognized out of the box (graph, vector, time-series, document, search, column-family, NewSQL, OLAP)
+- **`coolify.database` Docker label** — explicitly mark any service as a database (or not) in your compose files
+- **`# type: database` comment convention** — template-level metadata that automatically classifies all services
+- **Wire-compatible backup support** — YugabyteDB, TiDB, FerretDB, Percona, and Apache AGE get native dump-based backups
+- **Expanded port mapping** — "Make Publicly Available" works for all recognized database types
+- **Meaningful error messages** — unsupported backup types guide users to `custom_type` or Resource Backups
 
 ### Custom Template Sources
 - Add any GitHub repository (public or private) as a template source
@@ -428,6 +438,175 @@ The dropdown only appears when at least one custom template source has been conf
 
 ---
 
+### 5. Enhanced Database Classification
+
+Coolify classifies service containers as either `ServiceDatabase` or `ServiceApplication` based on a hardcoded image list. Many modern databases — Memgraph, Milvus, Qdrant, Cassandra, Neo4j, and dozens more — are missing from this list, causing them to be misclassified as applications. This breaks features like "Make Publicly Available", scheduled backups, database import, and backup UI visibility.
+
+Coolify Enhanced solves this through three complementary mechanisms.
+
+#### Mechanism 1: Expanded Image List
+
+The `DATABASE_DOCKER_IMAGES` constant is expanded with ~50 additional database images, organized by category:
+
+| Category | Databases Added |
+|----------|----------------|
+| **Graph** | Memgraph, Neo4j, ArangoDB, OrientDB, Dgraph, JanusGraph, Apache AGE |
+| **Vector** | Milvus, Qdrant, Weaviate, ChromaDB |
+| **Time-series** | QuestDB, TDengine, VictoriaMetrics, InfluxDB |
+| **Document** | CouchDB, Couchbase, FerretDB, SurrealDB, RavenDB, RethinkDB |
+| **Search** | Elasticsearch, OpenSearch, Meilisearch, Typesense, Manticore, Solr |
+| **Key-value** | Valkey, Memcached |
+| **Column-family** | Cassandra, ScyllaDB |
+| **NewSQL** | CockroachDB, YugabyteDB, TiDB, Vitess |
+| **OLAP** | Druid, Pinot, DuckDB |
+| **Other** | EdgeDB, EventStoreDB, ImmuDB, Percona, FoundationDB, Hazelcast, Ignite |
+
+These are automatically recognized when deploying one-click services — no configuration needed.
+
+#### Mechanism 2: `coolify.database` Docker Label
+
+For databases not in the expanded list (or to explicitly override classification), add the `coolify.database` label to your docker-compose services:
+
+```yaml
+services:
+  my-custom-db:
+    image: myorg/custom-database:latest
+    labels:
+      coolify.database: "true"
+```
+
+This works in:
+- Custom template YAML files
+- Any docker-compose file deployed as a Coolify service
+- Per-service granularity (e.g., mark the database container but not the admin UI)
+
+Set to `"false"` to force-classify a database image as an application:
+
+```yaml
+services:
+  redis-cache:
+    image: redis:7
+    labels:
+      coolify.database: "false"  # Treat as application, not database
+```
+
+The label check is case-insensitive and accepts `true/false/1/0/yes/no/on/off`.
+
+#### Mechanism 3: `# type: database` Comment Convention
+
+Template authors can add a `# type:` metadata header to classify all services in the template at once:
+
+```yaml
+# documentation: https://memgraph.com/docs
+# slogan: Real-time graph database
+# tags: graph,database,cypher
+# type: database
+
+services:
+  memgraph:
+    image: memgraph/memgraph:latest
+    # ...
+```
+
+This injects `coolify.database: "true"` labels into all services in the compose YAML during parsing. Per-service labels take precedence over the template-level header, so multi-service templates can have mixed classifications:
+
+```yaml
+# type: database
+
+services:
+  memgraph:
+    image: memgraph/memgraph:latest
+    # Gets coolify.database=true from # type: database
+
+  memgraph-lab:
+    image: memgraph/lab:latest
+    labels:
+      coolify.database: "false"  # Override: this is a web UI, not a database
+```
+
+#### Wire-Compatible Backup Support
+
+Databases that speak a standard protocol AND produce correct backups with standard dump tools are automatically mapped to their parent backup type:
+
+| Database | Mapped To | Dump Tool | Backup UI | Import |
+|----------|-----------|-----------|:---------:|:------:|
+| **YugabyteDB** | PostgreSQL | `pg_dump` | Yes | Yes |
+| **Apache AGE** | PostgreSQL | `pg_dump` | Yes | Yes |
+| **TiDB** | MySQL | `mysqldump` | Yes | Yes |
+| **Percona Server** | MySQL | `mysqldump` | Yes | Yes |
+| **FerretDB** | MongoDB | `mongodump` | Yes | Yes |
+
+Databases where standard tools fail (CockroachDB, Vitess, ScyllaDB) are intentionally **not** mapped. For these, use [Resource Backups](#3-resource-backups) for volume-level backups, or set `custom_type` on the service database if you know your setup is compatible.
+
+#### Setting `custom_type` for Manual Override
+
+If a database isn't automatically recognized or wire-compatible, you can set `custom_type` directly on the ServiceDatabase record to force a specific backup type:
+
+```bash
+# Via Coolify's database or tinker — set custom_type to a supported type
+# Supported types: postgresql, mysql, mariadb, mongodb
+```
+
+This overrides all automatic detection and enables dump-based backups for that service.
+
+#### Expanded Port Mapping ("Make Publicly Available")
+
+The "Make Publicly Available" feature (database proxy) now supports all recognized database types with correct default ports. If a database type isn't in the built-in map, the system:
+
+1. Looks up the base image name in an expanded port map (~50 entries)
+2. Tries partial string matching for variants (e.g., `timescaledb-ha` matches `timescale`)
+3. Extracts the port from the service's docker-compose configuration
+4. Provides a helpful error message if all methods fail
+
+#### Multi-Port Database Proxy
+
+Some databases (e.g., Memgraph, Neo4j) expose multiple ports — one for database queries and others for admin UIs, log viewers, or alternate protocols. Coolify's built-in proxy only supports a single port. Coolify Enhanced adds multi-port proxy support via the `coolify.proxyPorts` Docker label.
+
+**How to use:** Add the `coolify.proxyPorts` label to your service in the docker-compose template:
+
+```yaml
+services:
+  memgraph:
+    image: memgraph/memgraph:latest
+    labels:
+      coolify.proxyPorts: "7687:bolt,7444:log-viewer"
+```
+
+The label format is `"internalPort:label,internalPort:label,..."`. Each entry declares an internal container port and a human-readable label.
+
+**What happens in the UI:**
+
+When you view the service database in Coolify, instead of a single "Make Publicly Available" toggle, you'll see a port mapping table:
+
+| Port | Label | Enabled | Public Port |
+|------|-------|---------|-------------|
+| 7687 | bolt | Toggle | 17687 |
+| 7444 | log-viewer | Toggle | 17444 |
+
+Each port can be independently enabled/disabled with its own public port number. The system creates a single nginx proxy container that handles all enabled ports.
+
+**Key behaviors:**
+
+- When the `coolify.proxyPorts` label is absent, the UI shows the stock single-port toggle (fully backward compatible)
+- Port configurations are stored in the `proxy_ports` JSON column on the service database
+- All enabled ports share one nginx proxy container with multiple `stream` server blocks
+- Disabling all ports stops and removes the proxy container
+- Public URLs for all enabled ports are displayed in the UI
+
+#### What Works Automatically
+
+| Feature | Recognized DBs (expanded list) | Label/Comment Override | Wire-Compatible | Other DBs |
+|---------|:-----------------------------:|:---------------------:|:--------------:|:---------:|
+| Correct classification | Yes | Yes | Yes | Via label |
+| "Make Publicly Available" | Yes | Yes | Yes | Yes (port map) |
+| Multi-port proxy | Via `coolify.proxyPorts` label | Via `coolify.proxyPorts` label | Via `coolify.proxyPorts` label | Via `coolify.proxyPorts` label |
+| Backup UI visible | — | — | Yes | Set `custom_type` |
+| Dump-based backups | — | — | Yes | Set `custom_type` |
+| Import UI visible | — | — | Yes | Set `custom_type` |
+| Volume-level backups | Yes | Yes | Yes | Yes (Resource Backups) |
+
+---
+
 ## Installation
 
 ### Requirements
@@ -633,7 +812,7 @@ Coolify Enhanced is a **Laravel package** that extends Coolify via its service p
 | **Policy overrides** via `Gate::policy()` in `$app->booted()` | Granular permissions — replaces Coolify's permissive defaults |
 | **View overlays** — modified copies of Coolify Blade views | Backup sidebar items, encryption form, template source labels |
 | **Middleware injection** | Access Matrix on Team Admin page |
-| **File overlays in Docker image** | Encryption-aware backup/restore jobs, custom template loading |
+| **File overlays in Docker image** | Encryption-aware backup/restore jobs, custom template loading, expanded database classification |
 | **S6-overlay service** | Auto-run database migrations on container start |
 
 ### Database Schema (Additions)
@@ -658,6 +837,10 @@ frequency (cron)                        size / filename
 s3_storage_id                           is_encrypted
 enabled                                 created_at
 
+service_databases (added columns)
+---------------------------------
+proxy_ports (JSON, nullable)
+
 custom_template_sources
 -----------------------
 id / uuid
@@ -669,6 +852,19 @@ sync_status / last_synced_at / sync_error
 ```
 
 For the full architecture document including flow diagrams, security considerations, and extensibility points, see [Architecture](docs/architecture.md).
+
+### Feature Documentation
+
+Each feature has detailed documentation under `docs/features/<feature-name>/`:
+
+| Feature | Folder | Contents |
+|---------|--------|----------|
+| Enhanced Database Classification | [`docs/features/enhanced-database-classification/`](docs/features/enhanced-database-classification/) | PRD, implementation plan, feature overview |
+
+Each feature folder contains:
+- **PRD.md** — Product Requirements Document (problem, goals, design, rationale, risks)
+- **plan.md** — Technical implementation plan (code snippets, architecture, testing checklist)
+- **README.md** — Feature overview and quick reference
 
 ---
 
@@ -711,9 +907,11 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
+3. Create feature documentation under `docs/features/<feature-name>/` with PRD.md, plan.md, and README.md
+4. Implement the feature
+5. Update all documentation (README.md, CLAUDE.md, AGENTS.md, relevant docs/ files)
+6. Commit and push
+7. Open a Pull Request
 
 For development guidance, see [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md).
 
