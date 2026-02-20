@@ -35,7 +35,7 @@ class NetworkReconcileJob implements ShouldQueue
     public function middleware(): array
     {
         $key = $this->fullReconcile
-            ? 'network-reconcile-server'
+            ? 'network-reconcile-server-'.get_class($this->resource).'-'.$this->resource->id
             : 'network-reconcile-'.get_class($this->resource).'-'.$this->resource->id;
 
         return [

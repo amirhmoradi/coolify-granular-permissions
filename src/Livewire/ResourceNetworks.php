@@ -20,6 +20,23 @@ use Livewire\Component;
  */
 class ResourceNetworks extends Component
 {
+    /**
+     * Allowlist of valid resource model classes.
+     * Prevents arbitrary class instantiation via Livewire public property tampering.
+     */
+    private const ALLOWED_RESOURCE_TYPES = [
+        \App\Models\Application::class,
+        \App\Models\Service::class,
+        \App\Models\StandalonePostgresql::class,
+        \App\Models\StandaloneMysql::class,
+        \App\Models\StandaloneMariadb::class,
+        \App\Models\StandaloneMongodb::class,
+        \App\Models\StandaloneRedis::class,
+        \App\Models\StandaloneKeydb::class,
+        \App\Models\StandaloneDragonfly::class,
+        \App\Models\StandaloneClickhouse::class,
+    ];
+
     public $resourceId;
 
     public $resourceType;
@@ -31,9 +48,29 @@ class ResourceNetworks extends Component
 
     public function mount($resourceId, $resourceType, $resourceName = ''): void
     {
+        if (! config('coolify-enhanced.enabled', false) || ! config('coolify-enhanced.network_management.enabled', false)) {
+            abort(404);
+        }
+
+        if (! in_array($resourceType, self::ALLOWED_RESOURCE_TYPES, true)) {
+            abort(403, 'Invalid resource type.');
+        }
+
         $this->resourceId = $resourceId;
         $this->resourceType = $resourceType;
         $this->resourceName = $resourceName;
+    }
+
+    /**
+     * Resolve the resource model safely using the allowlisted type.
+     */
+    private function resolveResource()
+    {
+        if (! in_array($this->resourceType, self::ALLOWED_RESOURCE_TYPES, true)) {
+            throw new \RuntimeException('Invalid resource type.');
+        }
+
+        return $this->resourceType::findOrFail($this->resourceId);
     }
 
     public function addToNetwork(): void
@@ -43,7 +80,7 @@ class ResourceNetworks extends Component
         }
 
         try {
-            $resource = $this->resourceType::findOrFail($this->resourceId);
+            $resource = $this->resolveResource();
             $network = ManagedNetwork::findOrFail($this->selectedNetworkId);
             $server = NetworkService::getServerForResource($resource);
 
@@ -83,7 +120,11 @@ class ResourceNetworks extends Component
     public function removeFromNetwork(int $pivotId): void
     {
         try {
-            $pivot = ResourceNetwork::findOrFail($pivotId);
+            // Verify pivot belongs to this resource (prevents cross-resource manipulation)
+            $pivot = ResourceNetwork::where('id', $pivotId)
+                ->where('resource_type', $this->resourceType)
+                ->where('resource_id', $this->resourceId)
+                ->firstOrFail();
 
             // Don't allow removing auto-attached environment networks
             if ($pivot->is_auto_attached && $pivot->managedNetwork->scope === 'environment') {
@@ -92,7 +133,7 @@ class ResourceNetworks extends Component
                 return;
             }
 
-            $resource = $this->resourceType::findOrFail($this->resourceId);
+            $resource = $this->resolveResource();
             $server = NetworkService::getServerForResource($resource);
             $network = $pivot->managedNetwork;
 
@@ -112,8 +153,12 @@ class ResourceNetworks extends Component
     public function reconnect(int $pivotId): void
     {
         try {
-            $pivot = ResourceNetwork::findOrFail($pivotId);
-            $resource = $this->resourceType::findOrFail($this->resourceId);
+            // Verify pivot belongs to this resource (prevents cross-resource manipulation)
+            $pivot = ResourceNetwork::where('id', $pivotId)
+                ->where('resource_type', $this->resourceType)
+                ->where('resource_id', $this->resourceId)
+                ->firstOrFail();
+            $resource = $this->resolveResource();
             $server = NetworkService::getServerForResource($resource);
             $network = $pivot->managedNetwork;
 
@@ -136,7 +181,9 @@ class ResourceNetworks extends Component
             ->with('managedNetwork')
             ->get();
 
-        $resource = $this->resourceType::find($this->resourceId);
+        $resource = in_array($this->resourceType, self::ALLOWED_RESOURCE_TYPES, true)
+            ? $this->resourceType::find($this->resourceId)
+            : null;
         $server = $resource ? NetworkService::getServerForResource($resource) : null;
 
         $availableNetworks = $server

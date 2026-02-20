@@ -124,8 +124,8 @@ if ($network->driver === 'overlay' && !static::isSwarmManager($server)) {
 - `src/Livewire/NetworkSettings.php` — Settings UI
 - `src/Http/Controllers/Api/NetworkController.php` — API
 - `resources/views/livewire/network-*.blade.php` — Views (4 files)
-- `database/migrations/2025_01_000010_*.php` — Schema
-- `database/migrations/2025_01_000011_*.php` — Swarm columns
+- `database/migrations/2024_01_01_000010_*.php` — Schema
+- `database/migrations/2024_01_01_000011_*.php` — Swarm columns
 
 ### Overlay files (Phase 2 only)
 - `src/Overrides/Helpers/proxy.php` — 4 functions modified

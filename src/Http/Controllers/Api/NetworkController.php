@@ -9,12 +9,13 @@ use AmirhMoradi\CoolifyEnhanced\Services\NetworkService;
 use App\Models\Server;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Gate;
 
 class NetworkController extends Controller
 {
     public function __construct()
     {
-        if (!config('coolify-enhanced.enabled', false) || !config('coolify-enhanced.network_management.enabled', false)) {
+        if (! config('coolify-enhanced.enabled', false) || ! config('coolify-enhanced.network_management.enabled', false)) {
             abort(404);
         }
     }
@@ -35,10 +36,12 @@ class NetworkController extends Controller
      */
     public function store(Request $request, string $serverUuid)
     {
+        Gate::authorize('create', ManagedNetwork::class);
+
         $server = Server::ownedByCurrentTeam()->where('uuid', $serverUuid)->firstOrFail();
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/'],
             'is_internal' => 'nullable|boolean',
             'subnet' => ['nullable', 'string', 'max:50', 'regex:/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/'],
             'gateway' => ['nullable', 'string', 'max:50', 'regex:/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/'],
@@ -53,12 +56,14 @@ class NetworkController extends Controller
         // Create DB record only (defer Docker creation to apply options first)
         $network = NetworkService::ensureSharedNetwork($validated['name'], $server, $team, createDocker: false);
 
-        // Apply optional settings before Docker network creation
-        $updates = [];
-        if (isset($validated['is_internal'])) $updates['is_internal'] = $validated['is_internal'];
-        if (isset($validated['subnet'])) $updates['subnet'] = $validated['subnet'];
-        if (isset($validated['gateway'])) $updates['gateway'] = $validated['gateway'];
-        if (!empty($updates)) {
+        // Apply optional settings before Docker network creation (single update)
+        $updates = array_filter([
+            'is_internal' => $validated['is_internal'] ?? null,
+            'subnet' => $validated['subnet'] ?? null,
+            'gateway' => $validated['gateway'] ?? null,
+        ], fn ($v) => $v !== null);
+
+        if (! empty($updates)) {
             $network->update($updates);
         }
 
@@ -97,6 +102,8 @@ class NetworkController extends Controller
         $network = ManagedNetwork::where('uuid', $networkUuid)
             ->where('server_id', $server->id)
             ->firstOrFail();
+
+        Gate::authorize('delete', $network);
 
         // Don't allow deleting system or auto-created environment networks
         if (in_array($network->scope, ['system', 'environment'])) {
@@ -182,13 +189,14 @@ class NetworkController extends Controller
             'network_uuid' => 'required|string',
         ]);
 
-        $network = ManagedNetwork::where('uuid', $validated['network_uuid'])->firstOrFail();
         $server = NetworkService::getServerForResource($resource);
 
-        // Verify network is on the same server
-        if ($network->server_id !== $server->id) {
-            return response()->json(['error' => 'Network is on a different server'], 422);
-        }
+        // Scope network lookup to the same server (prevents cross-server attachment)
+        $network = ManagedNetwork::where('uuid', $validated['network_uuid'])
+            ->where('server_id', $server->id)
+            ->firstOrFail();
+
+        Gate::authorize('connect', $network);
 
         // Connect containers
         $containerNames = NetworkService::getContainerNames($resource);
@@ -220,8 +228,14 @@ class NetworkController extends Controller
     public function detachResource(string $type, string $uuid, string $networkUuid)
     {
         $resource = $this->resolveResource($type, $uuid);
-        $network = ManagedNetwork::where('uuid', $networkUuid)->firstOrFail();
         $server = NetworkService::getServerForResource($resource);
+
+        // Scope network lookup to the same server
+        $network = ManagedNetwork::where('uuid', $networkUuid)
+            ->where('server_id', $server->id)
+            ->firstOrFail();
+
+        Gate::authorize('disconnect', $network);
 
         // Don't allow detaching from auto-attached environment networks
         $pivot = ResourceNetwork::where('resource_type', get_class($resource))
@@ -249,21 +263,21 @@ class NetworkController extends Controller
 
     /**
      * Resolve a resource from type and UUID.
-     * Supported types: application, service, database (all standalone variants)
+     * Scoped to the current team to prevent cross-team access.
      */
     protected function resolveResource(string $type, string $uuid)
     {
         return match ($type) {
-            'application' => \App\Models\Application::where('uuid', $uuid)->firstOrFail(),
-            'service' => \App\Models\Service::where('uuid', $uuid)->firstOrFail(),
-            'postgresql' => \App\Models\StandalonePostgresql::where('uuid', $uuid)->firstOrFail(),
-            'mysql' => \App\Models\StandaloneMysql::where('uuid', $uuid)->firstOrFail(),
-            'mariadb' => \App\Models\StandaloneMariadb::where('uuid', $uuid)->firstOrFail(),
-            'mongodb' => \App\Models\StandaloneMongodb::where('uuid', $uuid)->firstOrFail(),
-            'redis' => \App\Models\StandaloneRedis::where('uuid', $uuid)->firstOrFail(),
-            'keydb' => \App\Models\StandaloneKeydb::where('uuid', $uuid)->firstOrFail(),
-            'dragonfly' => \App\Models\StandaloneDragonfly::where('uuid', $uuid)->firstOrFail(),
-            'clickhouse' => \App\Models\StandaloneClickhouse::where('uuid', $uuid)->firstOrFail(),
+            'application' => \App\Models\Application::ownedByCurrentTeam()->where('uuid', $uuid)->firstOrFail(),
+            'service' => \App\Models\Service::ownedByCurrentTeam()->where('uuid', $uuid)->firstOrFail(),
+            'postgresql' => \App\Models\StandalonePostgresql::ownedByCurrentTeam()->where('uuid', $uuid)->firstOrFail(),
+            'mysql' => \App\Models\StandaloneMysql::ownedByCurrentTeam()->where('uuid', $uuid)->firstOrFail(),
+            'mariadb' => \App\Models\StandaloneMariadb::ownedByCurrentTeam()->where('uuid', $uuid)->firstOrFail(),
+            'mongodb' => \App\Models\StandaloneMongodb::ownedByCurrentTeam()->where('uuid', $uuid)->firstOrFail(),
+            'redis' => \App\Models\StandaloneRedis::ownedByCurrentTeam()->where('uuid', $uuid)->firstOrFail(),
+            'keydb' => \App\Models\StandaloneKeydb::ownedByCurrentTeam()->where('uuid', $uuid)->firstOrFail(),
+            'dragonfly' => \App\Models\StandaloneDragonfly::ownedByCurrentTeam()->where('uuid', $uuid)->firstOrFail(),
+            'clickhouse' => \App\Models\StandaloneClickhouse::ownedByCurrentTeam()->where('uuid', $uuid)->firstOrFail(),
             default => abort(404, "Unknown resource type: {$type}"),
         };
     }

@@ -441,30 +441,38 @@ class NetworkService
      */
     public static function ensureSharedNetwork(string $name, Server $server, Team $team, bool $createDocker = true): ManagedNetwork
     {
+        // Look up by name + server + scope (not by docker_network_name, which includes a random CUID)
+        $existing = ManagedNetwork::where('name', $name)
+            ->where('server_id', $server->id)
+            ->where('scope', ManagedNetwork::SCOPE_SHARED)
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
         $identifier = (string) new Cuid2;
         $dockerName = static::generateNetworkName('shared', $identifier);
 
         try {
-            $network = ManagedNetwork::firstOrCreate(
-                [
-                    'docker_network_name' => $dockerName,
-                    'server_id' => $server->id,
-                ],
-                [
-                    'uuid' => $identifier,
-                    'name' => $name,
-                    'driver' => static::resolveNetworkDriver($server),
-                    'scope' => ManagedNetwork::SCOPE_SHARED,
-                    'team_id' => $team->id,
-                    'is_attachable' => true,
-                    'is_internal' => false,
-                    'is_proxy_network' => false,
-                    'status' => ManagedNetwork::STATUS_PENDING,
-                ]
-            );
+            $network = ManagedNetwork::create([
+                'uuid' => $identifier,
+                'name' => $name,
+                'docker_network_name' => $dockerName,
+                'server_id' => $server->id,
+                'driver' => static::resolveNetworkDriver($server),
+                'scope' => ManagedNetwork::SCOPE_SHARED,
+                'team_id' => $team->id,
+                'is_attachable' => true,
+                'is_internal' => false,
+                'is_proxy_network' => false,
+                'status' => ManagedNetwork::STATUS_PENDING,
+            ]);
         } catch (\Throwable $e) {
-            $network = ManagedNetwork::where('docker_network_name', $dockerName)
+            // Race condition: another process created it between our check and create
+            $network = ManagedNetwork::where('name', $name)
                 ->where('server_id', $server->id)
+                ->where('scope', ManagedNetwork::SCOPE_SHARED)
                 ->firstOrFail();
         }
 

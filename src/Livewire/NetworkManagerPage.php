@@ -2,6 +2,7 @@
 
 namespace AmirhMoradi\CoolifyEnhanced\Livewire;
 
+use App\Models\Server;
 use Livewire\Component;
 
 /**
@@ -12,12 +13,16 @@ use Livewire\Component;
  */
 class NetworkManagerPage extends Component
 {
-    public $server;
+    public Server $server;
 
     public function mount()
     {
+        if (! config('coolify-enhanced.enabled', false) || ! config('coolify-enhanced.network_management.enabled', false)) {
+            abort(404);
+        }
+
         try {
-            $this->server = \App\Models\Server::ownedByCurrentTeam()
+            $this->server = Server::ownedByCurrentTeam()
                 ->where('uuid', request()->route('server_uuid'))
                 ->firstOrFail();
         } catch (\Throwable $e) {

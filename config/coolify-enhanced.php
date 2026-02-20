@@ -102,16 +102,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Custom Template Sources
-    |--------------------------------------------------------------------------
-    |
-    | Configuration for custom GitHub template sources.
-    | Allows adding external repositories with docker-compose templates
-    | that appear in the one-click service list.
-    |
-    */
-    /*
-    |--------------------------------------------------------------------------
     | Network Management
     |--------------------------------------------------------------------------
     |
@@ -138,10 +128,10 @@ return [
         'max_networks_per_server' => (int) env('COOLIFY_MAX_NETWORKS', 200),
 
         // Network name prefix (avoid collisions with Coolify's naming)
-        'prefix' => 'ce',
+        'prefix' => env('COOLIFY_NETWORK_PREFIX', 'ce'),
 
         // Delay before post-deployment network assignment (seconds)
-        'post_deploy_delay' => 3,
+        'post_deploy_delay' => (int) env('COOLIFY_NETWORK_POST_DEPLOY_DELAY', 3),
 
         // Enable inter-node encryption for Swarm overlay networks
         // Uses Docker's --opt encrypted flag (IPsec between Swarm nodes)
@@ -149,6 +139,16 @@ return [
         'swarm_overlay_encryption' => env('COOLIFY_SWARM_OVERLAY_ENCRYPTION', false),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Custom Template Sources
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for custom GitHub template sources.
+    | Allows adding external repositories with docker-compose templates
+    | that appear in the one-click service list.
+    |
+    */
     'custom_templates' => [
         // Auto-sync interval (cron expression). Set to null to disable auto-sync.
         'sync_frequency' => env('COOLIFY_TEMPLATE_SYNC_FREQUENCY', '0 */6 * * *'),

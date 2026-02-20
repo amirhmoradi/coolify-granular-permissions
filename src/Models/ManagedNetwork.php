@@ -146,9 +146,14 @@ class ManagedNetwork extends Model
 
     /**
      * Get the count of currently connected containers.
+     * Uses eager-loaded relation when available to avoid N+1 queries.
      */
     public function connectedContainerCount(): int
     {
+        if ($this->relationLoaded('resourceNetworks')) {
+            return $this->resourceNetworks->where('is_connected', true)->count();
+        }
+
         return $this->resourceNetworks()->where('is_connected', true)->count();
     }
 

@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-Route::middleware(['auth:sanctum', 'api.sensitive'])->prefix('v1')->group(function () {
+Route::middleware(['auth:sanctum', \App\Http\Middleware\ApiAllowed::class, 'api.sensitive'])->prefix('v1')->group(function () {
     // Project access management
     Route::get('/projects/{uuid}/access', [PermissionsController::class, 'listProjectAccess'])
         ->middleware('api.ability:read');

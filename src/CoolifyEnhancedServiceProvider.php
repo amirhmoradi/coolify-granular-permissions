@@ -359,6 +359,25 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
                     NetworkService::autoDetachResource($service);
                 });
             }
+
+            // Standalone database deletion cleanup
+            $databaseModels = [
+                \App\Models\StandalonePostgresql::class,
+                \App\Models\StandaloneMysql::class,
+                \App\Models\StandaloneMariadb::class,
+                \App\Models\StandaloneMongodb::class,
+                \App\Models\StandaloneRedis::class,
+                \App\Models\StandaloneKeydb::class,
+                \App\Models\StandaloneDragonfly::class,
+                \App\Models\StandaloneClickhouse::class,
+            ];
+            foreach ($databaseModels as $modelClass) {
+                if (class_exists($modelClass)) {
+                    $modelClass::deleting(function ($database) {
+                        NetworkService::autoDetachResource($database);
+                    });
+                }
+            }
         });
     }
 

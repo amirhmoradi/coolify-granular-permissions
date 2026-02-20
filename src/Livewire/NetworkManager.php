@@ -6,6 +6,7 @@ use AmirhMoradi\CoolifyEnhanced\Jobs\ProxyMigrationJob;
 use AmirhMoradi\CoolifyEnhanced\Models\ManagedNetwork;
 use AmirhMoradi\CoolifyEnhanced\Services\NetworkService;
 use App\Models\Server;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 
 /**
@@ -20,6 +21,8 @@ use Livewire\Component;
  */
 class NetworkManager extends Component
 {
+    use AuthorizesRequests;
+
     public Server $server;
 
     public string $activeTab = 'managed'; // 'managed' or 'docker'
@@ -42,6 +45,10 @@ class NetworkManager extends Component
 
     public function mount(Server $server): void
     {
+        if (! config('coolify-enhanced.enabled', false) || ! config('coolify-enhanced.network_management.enabled', false)) {
+            abort(404);
+        }
+
         $this->server = $server;
         $this->isSwarmServer = method_exists($server, 'isSwarm') && $server->isSwarm();
         $this->isSwarmManager = method_exists($server, 'isSwarmManager') && $server->isSwarmManager();
@@ -57,6 +64,8 @@ class NetworkManager extends Component
 
     public function createSharedNetwork(): void
     {
+        $this->authorize('create', ManagedNetwork::class);
+
         $this->validate([
             'newNetworkName' => 'required|string|max:255',
         ]);
@@ -100,7 +109,12 @@ class NetworkManager extends Component
     public function deleteNetwork(int $networkId): void
     {
         try {
-            $network = ManagedNetwork::findOrFail($networkId);
+            // Scope to this server to prevent cross-server network deletion
+            $network = ManagedNetwork::where('id', $networkId)
+                ->where('server_id', $this->server->id)
+                ->firstOrFail();
+
+            $this->authorize('delete', $network);
 
             // Don't allow deleting env/system networks
             if (in_array($network->scope, ['environment', 'system'])) {
@@ -188,7 +202,7 @@ class NetworkManager extends Component
 
         $proxyIsolationEnabled = config('coolify-enhanced.network_management.proxy_isolation', false);
         $proxyNetwork = $proxyIsolationEnabled
-            ? ManagedNetwork::forServer($this->server)->proxy()->active()->first()
+            ? ManagedNetwork::forServer($this->server)->proxy()->active()->with('resourceNetworks')->first()
             : null;
 
         return view('coolify-enhanced::livewire.network-manager', [

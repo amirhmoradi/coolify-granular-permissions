@@ -29,6 +29,10 @@ class NetworkSettings extends Component
 
     public function mount(): void
     {
+        if (! config('coolify-enhanced.enabled', false)) {
+            abort(404);
+        }
+
         $this->networkManagementEnabled = config('coolify-enhanced.network_management.enabled', false);
         $this->isolationMode = config('coolify-enhanced.network_management.isolation_mode', 'environment');
         $this->proxyIsolation = config('coolify-enhanced.network_management.proxy_isolation', false);
