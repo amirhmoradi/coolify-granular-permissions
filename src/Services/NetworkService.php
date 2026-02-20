@@ -9,7 +9,6 @@ use App\Models\Environment;
 use App\Models\Server;
 use App\Models\Service;
 use App\Models\Team;
-use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Visus\Cuid2\Cuid2;
@@ -37,8 +36,23 @@ class NetworkService
     public static function createDockerNetwork(Server $server, ManagedNetwork $network): bool
     {
         try {
+            // Overlay networks can only be created on Swarm manager nodes
+            if ($network->driver === 'overlay' && !static::isSwarmManager($server)) {
+                Log::warning("NetworkService: Cannot create overlay network on non-manager node", [
+                    'server' => $server->name,
+                    'network' => $network->docker_network_name,
+                ]);
+
+                $network->update([
+                    'status' => ManagedNetwork::STATUS_ERROR,
+                    'error_message' => 'Overlay networks can only be created on Swarm manager nodes.',
+                ]);
+
+                return false;
+            }
+
             $parts = ['docker network create'];
-            $parts[] = "--driver {$network->driver}";
+            $parts[] = '--driver '.escapeshellarg($network->driver);
 
             if ($network->is_attachable) {
                 $parts[] = '--attachable';
@@ -49,11 +63,11 @@ class NetworkService
             }
 
             if ($network->subnet) {
-                $parts[] = "--subnet {$network->subnet}";
+                $parts[] = '--subnet '.escapeshellarg($network->subnet);
             }
 
             if ($network->gateway) {
-                $parts[] = "--gateway {$network->gateway}";
+                $parts[] = '--gateway '.escapeshellarg($network->gateway);
             }
 
             // Add encrypted option for overlay networks if configured
@@ -63,23 +77,23 @@ class NetworkService
 
             // Add labels for reconciliation
             $parts[] = '--label coolify.managed=true';
-            $parts[] = "--label coolify.scope={$network->scope}";
+            $parts[] = '--label '.escapeshellarg("coolify.scope={$network->scope}");
 
             if ($network->environment_id) {
                 $envUuid = $network->environment?->uuid;
                 if ($envUuid) {
-                    $parts[] = "--label coolify.environment={$envUuid}";
+                    $parts[] = '--label '.escapeshellarg("coolify.environment={$envUuid}");
                 }
             }
 
             if ($network->project_id) {
                 $projectUuid = $network->project?->uuid;
                 if ($projectUuid) {
-                    $parts[] = "--label coolify.project={$projectUuid}";
+                    $parts[] = '--label '.escapeshellarg("coolify.project={$projectUuid}");
                 }
             }
 
-            $parts[] = $network->docker_network_name;
+            $parts[] = escapeshellarg($network->docker_network_name);
 
             $createCommand = implode(' ', $parts).' 2>/dev/null || true';
 
@@ -87,17 +101,32 @@ class NetworkService
 
             Log::info("NetworkService: Created Docker network {$network->docker_network_name} on server {$server->name}");
 
-            // Inspect to get the docker_id
+            // Inspect to verify the network actually exists and get the docker_id
             $inspection = static::inspectNetwork($server, $network->docker_network_name);
 
-            $network->update([
-                'docker_id' => $inspection['Id'] ?? null,
-                'status' => ManagedNetwork::STATUS_ACTIVE,
-                'last_synced_at' => now(),
-                'error_message' => null,
+            if ($inspection && !empty($inspection['Id'])) {
+                $network->update([
+                    'docker_id' => $inspection['Id'],
+                    'status' => ManagedNetwork::STATUS_ACTIVE,
+                    'last_synced_at' => now(),
+                    'error_message' => null,
+                ]);
+
+                return true;
+            }
+
+            // Network creation silently failed (|| true swallowed the error)
+            Log::warning("NetworkService: Docker network {$network->docker_network_name} creation may have failed — inspection returned empty", [
+                'server' => $server->name,
             ]);
 
-            return true;
+            $network->update([
+                'status' => ManagedNetwork::STATUS_ERROR,
+                'error_message' => 'Network creation succeeded but inspection returned empty. Network may not exist on the Docker host.',
+                'last_synced_at' => now(),
+            ]);
+
+            return false;
         } catch (\Throwable $e) {
             Log::warning("NetworkService: Failed to create Docker network {$network->docker_network_name}", [
                 'server' => $server->name,
@@ -121,7 +150,7 @@ class NetworkService
     public static function deleteDockerNetwork(Server $server, ManagedNetwork $network): bool
     {
         try {
-            $command = "docker network rm {$network->docker_network_name} 2>/dev/null || true";
+            $command = 'docker network rm '.escapeshellarg($network->docker_network_name).' 2>/dev/null || true';
 
             instant_remote_process([$command], $server);
 
@@ -157,12 +186,12 @@ class NetworkService
 
             if ($aliases) {
                 foreach ($aliases as $alias) {
-                    $parts[] = "--alias {$alias}";
+                    $parts[] = '--alias '.escapeshellarg($alias);
                 }
             }
 
-            $parts[] = $networkName;
-            $parts[] = $containerName;
+            $parts[] = escapeshellarg($networkName);
+            $parts[] = escapeshellarg($containerName);
 
             $command = implode(' ', $parts).' 2>/dev/null || true';
 
@@ -188,7 +217,7 @@ class NetworkService
     {
         try {
             $forceFlag = $force ? '--force ' : '';
-            $command = "docker network disconnect {$forceFlag}{$networkName} {$containerName} 2>/dev/null || true";
+            $command = "docker network disconnect {$forceFlag}".escapeshellarg($networkName).' '.escapeshellarg($containerName).' 2>/dev/null || true';
 
             instant_remote_process([$command], $server);
 
@@ -213,7 +242,7 @@ class NetworkService
     public static function inspectNetwork(Server $server, string $networkName): ?array
     {
         try {
-            $command = "docker network inspect {$networkName} --format '{{json .}}' 2>/dev/null";
+            $command = 'docker network inspect '.escapeshellarg($networkName)." --format '{{json .}}' 2>/dev/null";
 
             $output = instant_remote_process([$command], $server);
 
@@ -284,6 +313,26 @@ class NetworkService
         $dockerName = static::generateNetworkName('env', $environment->uuid);
         $humanName = "{$environment->name} ({$environment->project->name})";
 
+        // Check network limit before creating new networks
+        if (static::hasReachedNetworkLimit($server)) {
+            // If this specific network already exists, return it regardless of limit
+            $existing = ManagedNetwork::where('docker_network_name', $dockerName)
+                ->where('server_id', $server->id)
+                ->first();
+            if ($existing) {
+                return $existing;
+            }
+
+            Log::error("NetworkService: Network limit reached on server {$server->name}, cannot create environment network for {$environment->name}");
+            throw new \RuntimeException("Network limit reached on server {$server->name}. Increase COOLIFY_MAX_NETWORKS or remove unused networks.");
+        }
+
+        $driver = static::resolveNetworkDriver($server);
+        $options = [];
+        if ($driver === 'overlay' && config('coolify-enhanced.network_management.swarm_overlay_encryption', false)) {
+            $options['encrypted'] = true;
+        }
+
         try {
             $network = ManagedNetwork::firstOrCreate(
                 [
@@ -293,7 +342,7 @@ class NetworkService
                 [
                     'uuid' => (string) new Cuid2,
                     'name' => $humanName,
-                    'driver' => static::resolveNetworkDriver($server),
+                    'driver' => $driver,
                     'scope' => ManagedNetwork::SCOPE_ENVIRONMENT,
                     'team_id' => $environment->project->team_id,
                     'project_id' => $environment->project_id,
@@ -301,6 +350,8 @@ class NetworkService
                     'is_attachable' => true,
                     'is_internal' => false,
                     'is_proxy_network' => false,
+                    'is_encrypted_overlay' => !empty($options['encrypted']),
+                    'options' => $options ?: null,
                     'status' => ManagedNetwork::STATUS_PENDING,
                 ]
             );
@@ -330,6 +381,25 @@ class NetworkService
         $dockerName = static::generateNetworkName('proxy', $server->uuid);
         $humanName = "Proxy ({$server->name})";
 
+        // Check network limit before creating new networks
+        if (static::hasReachedNetworkLimit($server)) {
+            $existing = ManagedNetwork::where('docker_network_name', $dockerName)
+                ->where('server_id', $server->id)
+                ->first();
+            if ($existing) {
+                return $existing;
+            }
+
+            Log::error("NetworkService: Network limit reached on server {$server->name}, cannot create proxy network");
+            throw new \RuntimeException("Network limit reached on server {$server->name}. Increase COOLIFY_MAX_NETWORKS or remove unused networks.");
+        }
+
+        $driver = static::resolveNetworkDriver($server);
+        $options = [];
+        if ($driver === 'overlay' && config('coolify-enhanced.network_management.swarm_overlay_encryption', false)) {
+            $options['encrypted'] = true;
+        }
+
         try {
             $network = ManagedNetwork::firstOrCreate(
                 [
@@ -339,12 +409,14 @@ class NetworkService
                 [
                     'uuid' => (string) new Cuid2,
                     'name' => $humanName,
-                    'driver' => static::resolveNetworkDriver($server),
+                    'driver' => $driver,
                     'scope' => ManagedNetwork::SCOPE_PROXY,
                     'team_id' => $server->team_id,
                     'is_attachable' => true,
                     'is_internal' => false,
                     'is_proxy_network' => true,
+                    'is_encrypted_overlay' => !empty($options['encrypted']),
+                    'options' => $options ?: null,
                     'status' => ManagedNetwork::STATUS_PENDING,
                 ]
             );
@@ -367,7 +439,7 @@ class NetworkService
      * Shared networks are manually created and can be joined by any resource
      * on the same server, enabling cross-environment communication.
      */
-    public static function ensureSharedNetwork(string $name, Server $server, Team $team): ManagedNetwork
+    public static function ensureSharedNetwork(string $name, Server $server, Team $team, bool $createDocker = true): ManagedNetwork
     {
         $identifier = (string) new Cuid2;
         $dockerName = static::generateNetworkName('shared', $identifier);
@@ -396,7 +468,7 @@ class NetworkService
                 ->firstOrFail();
         }
 
-        if ($network->status === ManagedNetwork::STATUS_PENDING) {
+        if ($createDocker && $network->status === ManagedNetwork::STATUS_PENDING) {
             static::createDockerNetwork($server, $network);
         }
 
@@ -1023,7 +1095,7 @@ class NetworkService
                 }
             } else {
                 // Standalone databases
-                if (property_exists($resource, 'uuid')) {
+                if (isset($resource->uuid)) {
                     $output = instant_remote_process(
                         ["docker service ls --filter 'name={$resource->uuid}' --format '{{{{.Name}}}}' 2>/dev/null || true"],
                         $server
@@ -1073,16 +1145,16 @@ class NetworkService
             $parts = ['docker service update'];
 
             foreach ($networksToAdd as $network) {
-                $parts[] = "--network-add {$network}";
+                $parts[] = '--network-add '.escapeshellarg($network);
             }
 
             foreach ($networksToRemove as $network) {
-                $parts[] = "--network-rm {$network}";
+                $parts[] = '--network-rm '.escapeshellarg($network);
             }
 
             // --detach to avoid blocking on convergence
             $parts[] = '--detach';
-            $parts[] = $serviceName;
+            $parts[] = escapeshellarg($serviceName);
 
             $command = implode(' ', $parts).' 2>/dev/null || true';
 
@@ -1161,8 +1233,13 @@ class NetworkService
             return null;
         }
 
+        // Service sub-resources (ServiceDatabase, ServiceApplication) don't have direct environment()
+        if ($resource instanceof \App\Models\ServiceDatabase || $resource instanceof \App\Models\ServiceApplication) {
+            return $resource->service?->environment;
+        }
+
         // Application, Service, and standalone databases all have an environment relationship
-        if (method_exists($resource, 'environment') || property_exists($resource, 'environment')) {
+        if (method_exists($resource, 'environment')) {
             return $resource->environment ?? null;
         }
 
@@ -1195,7 +1272,7 @@ class NetworkService
         }
 
         // Standalone databases use uuid
-        if (property_exists($resource, 'uuid')) {
+        if (isset($resource->uuid)) {
             return [$resource->uuid];
         }
 
@@ -1207,7 +1284,16 @@ class NetworkService
      */
     public static function resourceHasFqdn($resource): bool
     {
-        return ! empty($resource->fqdn ?? null);
+        if (! empty($resource->fqdn ?? null)) {
+            return true;
+        }
+
+        // For Services, check if any sub-container (ServiceApplication) has an FQDN
+        if ($resource instanceof Service) {
+            return $resource->applications->contains(fn ($app) => ! empty($app->fqdn));
+        }
+
+        return false;
     }
 
     /**
@@ -1254,11 +1340,9 @@ class NetworkService
     public static function disconnectProxyFromNonProxyNetworks(Server $server): array
     {
         $results = [];
-        $defaultNetwork = $server->isSwarm() ? 'coolify-overlay' : 'coolify';
+        $defaultNetwork = static::isSwarmServer($server) ? 'coolify-overlay' : 'coolify';
 
-        // Get networks the proxy is currently connected to
-        $inspection = static::inspectNetwork($server, 'coolify-proxy');
-        // Can't inspect a container as a network — use docker inspect instead
+        // Inspect the proxy container to get its connected networks
         try {
             $output = instant_remote_process(
                 ['docker inspect --format=\'{{json .NetworkSettings.Networks}}\' coolify-proxy 2>/dev/null'],

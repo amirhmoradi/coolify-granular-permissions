@@ -40,8 +40,8 @@ class NetworkController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'is_internal' => 'nullable|boolean',
-            'subnet' => 'nullable|string|max:50',
-            'gateway' => 'nullable|string|max:50',
+            'subnet' => ['nullable', 'string', 'max:50', 'regex:/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/'],
+            'gateway' => ['nullable', 'string', 'max:50', 'regex:/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/'],
         ]);
 
         // Check network limit
@@ -50,14 +50,19 @@ class NetworkController extends Controller
         }
 
         $team = $request->user()->currentTeam();
-        $network = NetworkService::ensureSharedNetwork($validated['name'], $server, $team);
+        // Create DB record only (defer Docker creation to apply options first)
+        $network = NetworkService::ensureSharedNetwork($validated['name'], $server, $team, createDocker: false);
 
-        // Apply optional settings
-        if (isset($validated['is_internal'])) $network->update(['is_internal' => $validated['is_internal']]);
-        if (isset($validated['subnet'])) $network->update(['subnet' => $validated['subnet']]);
-        if (isset($validated['gateway'])) $network->update(['gateway' => $validated['gateway']]);
+        // Apply optional settings before Docker network creation
+        $updates = [];
+        if (isset($validated['is_internal'])) $updates['is_internal'] = $validated['is_internal'];
+        if (isset($validated['subnet'])) $updates['subnet'] = $validated['subnet'];
+        if (isset($validated['gateway'])) $updates['gateway'] = $validated['gateway'];
+        if (!empty($updates)) {
+            $network->update($updates);
+        }
 
-        // Create the Docker network
+        // Create the Docker network with all options applied
         NetworkService::createDockerNetwork($server, $network->fresh());
 
         return response()->json($network->fresh(), 201);

@@ -2090,13 +2090,16 @@ function parseDockerComposeFile(Service|Application $resource, bool $isNew = fal
                     if ($fqdns) {
                         // [PROXY ISOLATION OVERLAY] Resolve proxy network for service label injection
                         $proxyNetworkName = null;
-                        if (config('coolify-enhanced.network_management.proxy_isolation', false)
+                        if (config('coolify-enhanced.enabled', false)
+                            && config('coolify-enhanced.network_management.proxy_isolation', false)
                             && config('coolify-enhanced.network_management.enabled', false)) {
                             try {
                                 $proxyNet = \AmirhMoradi\CoolifyEnhanced\Models\ManagedNetwork::where('server_id', $resource->server->id)
                                     ->where('is_proxy_network', true)->where('status', 'active')->first();
                                 $proxyNetworkName = $proxyNet?->docker_network_name;
-                            } catch (\Throwable $e) {}
+                            } catch (\Throwable $e) {
+                                \Illuminate\Support\Facades\Log::debug('NetworkService: Failed to resolve proxy network for service labels', ['error' => $e->getMessage()]);
+                            }
                         }
                         // [END PROXY ISOLATION OVERLAY]
                         $shouldGenerateLabelsExactly = $resource->server->settings->generate_exact_labels;
@@ -2879,13 +2882,16 @@ function parseDockerComposeFile(Service|Application $resource, bool $isNew = fal
                         }
                         // [PROXY ISOLATION OVERLAY] Resolve proxy network for application label injection
                         $appProxyNetworkName = null;
-                        if (config('coolify-enhanced.network_management.proxy_isolation', false)
+                        if (config('coolify-enhanced.enabled', false)
+                            && config('coolify-enhanced.network_management.proxy_isolation', false)
                             && config('coolify-enhanced.network_management.enabled', false)) {
                             try {
                                 $appProxyNet = \AmirhMoradi\CoolifyEnhanced\Models\ManagedNetwork::where('server_id', $server->id)
                                     ->where('is_proxy_network', true)->where('status', 'active')->first();
                                 $appProxyNetworkName = $appProxyNet?->docker_network_name;
-                            } catch (\Throwable $e) {}
+                            } catch (\Throwable $e) {
+                                \Illuminate\Support\Facades\Log::debug('NetworkService: Failed to resolve proxy network for app labels', ['error' => $e->getMessage()]);
+                            }
                         }
                         // [END PROXY ISOLATION OVERLAY]
                         $shouldGenerateLabelsExactly = $server->settings->generate_exact_labels;

@@ -114,7 +114,8 @@ function collectDockerNetworksByServer(Server $server)
     // Phase 3 Swarm compatibility: No driver-specific logic needed here — this block
     // only adds the proxy network name to collections; actual creation happens in
     // connectProxyToNetworks() and ensureProxyNetworksExist() which handle Swarm vs standalone.
-    if (config('coolify-enhanced.network_management.proxy_isolation', false)
+    if (config('coolify-enhanced.enabled', false)
+        && config('coolify-enhanced.network_management.proxy_isolation', false)
         && config('coolify-enhanced.network_management.enabled', false)) {
         $proxyNetwork = \AmirhMoradi\CoolifyEnhanced\Models\ManagedNetwork::where('server_id', $server->id)
             ->where('is_proxy_network', true)
@@ -143,7 +144,8 @@ function connectProxyToNetworks(Server $server)
     // only connect proxy to proxy-tagged networks + the default network.
     // Phase 3 Swarm compatibility: Swarm servers use overlay driver; standalone use bridge (default).
     // Optional overlay encryption via COOLIFY_SWARM_OVERLAY_ENCRYPTION env var.
-    if (config('coolify-enhanced.network_management.proxy_isolation', false)
+    if (config('coolify-enhanced.enabled', false)
+        && config('coolify-enhanced.network_management.proxy_isolation', false)
         && config('coolify-enhanced.network_management.enabled', false)) {
         $proxyNetworks = \AmirhMoradi\CoolifyEnhanced\Models\ManagedNetwork::where('server_id', $server->id)
             ->where('is_proxy_network', true)
@@ -234,7 +236,8 @@ function ensureProxyNetworksExist(Server $server)
     // [PROXY ISOLATION OVERLAY] Ensure managed proxy network exists.
     // Phase 3 Swarm compatibility: Swarm servers use overlay driver; standalone use bridge (default).
     // Optional overlay encryption via COOLIFY_SWARM_OVERLAY_ENCRYPTION env var.
-    if (config('coolify-enhanced.network_management.proxy_isolation', false)
+    if (config('coolify-enhanced.enabled', false)
+        && config('coolify-enhanced.network_management.proxy_isolation', false)
         && config('coolify-enhanced.network_management.enabled', false)) {
         $proxyNetwork = \AmirhMoradi\CoolifyEnhanced\Models\ManagedNetwork::where('server_id', $server->id)
             ->where('is_proxy_network', true)
@@ -358,7 +361,8 @@ function generateDefaultProxyConfiguration(Server $server, array $custom_command
     // Phase 3 Swarm compatibility: Compose declares networks as `external: true`, so no
     // driver specification is needed here — the driver is set at creation time in
     // connectProxyToNetworks() and ensureProxyNetworksExist().
-    if (config('coolify-enhanced.network_management.proxy_isolation', false)
+    if (config('coolify-enhanced.enabled', false)
+        && config('coolify-enhanced.network_management.proxy_isolation', false)
         && config('coolify-enhanced.network_management.enabled', false)) {
         $proxyNetwork = \AmirhMoradi\CoolifyEnhanced\Models\ManagedNetwork::where('server_id', $server->id)
             ->where('is_proxy_network', true)

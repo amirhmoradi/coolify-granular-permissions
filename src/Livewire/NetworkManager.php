@@ -62,19 +62,30 @@ class NetworkManager extends Component
         ]);
 
         try {
-            $team = auth()->user()->currentTeam();
-            $network = NetworkService::ensureSharedNetwork($this->newNetworkName, $this->server, $team);
+            // Check network limit before creating
+            if (NetworkService::hasReachedNetworkLimit($this->server)) {
+                $this->dispatch('error', 'Network limit reached for this server. Remove unused networks or increase COOLIFY_MAX_NETWORKS.');
+                return;
+            }
 
+            $team = auth()->user()->currentTeam();
+            // Create DB record only (defer Docker creation to apply options first)
+            $network = NetworkService::ensureSharedNetwork($this->newNetworkName, $this->server, $team, createDocker: false);
+
+            // Apply optional settings BEFORE Docker network creation
+            $updates = [];
             if ($this->newNetworkInternal) {
-                $network->update(['is_internal' => true]);
+                $updates['is_internal'] = true;
             }
             if ($this->isSwarmServer && $this->newNetworkEncrypted) {
-                $network->update([
-                    'is_encrypted_overlay' => true,
-                    'options' => array_merge($network->options ?? [], ['encrypted' => true]),
-                ]);
+                $updates['is_encrypted_overlay'] = true;
+                $updates['options'] = array_merge($network->options ?? [], ['encrypted' => true]);
+            }
+            if (!empty($updates)) {
+                $network->update($updates);
             }
 
+            // Now create the Docker network with all options applied
             NetworkService::createDockerNetwork($this->server, $network->fresh());
 
             $this->newNetworkName = '';

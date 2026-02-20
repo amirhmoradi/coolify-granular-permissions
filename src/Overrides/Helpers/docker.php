@@ -682,7 +682,8 @@ function generateLabelsApplication(Application $application, ?ApplicationPreview
 
     // [PROXY ISOLATION OVERLAY] Resolve proxy network name for this server
     $proxyNetworkName = null;
-    if (config('coolify-enhanced.network_management.proxy_isolation', false)
+    if (config('coolify-enhanced.enabled', false)
+        && config('coolify-enhanced.network_management.proxy_isolation', false)
         && config('coolify-enhanced.network_management.enabled', false)) {
         try {
             $server = $application->destination->server ?? null;
