@@ -26,7 +26,7 @@
                     </div>
                     <div class="flex items-center gap-4">
                         <input type="file" wire:model="backupFile" accept=".json,application/json"
-                            class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-coolgray-200 file:text-white hover:file:bg-coolgray-300 file:cursor-pointer" />
+                            class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-neutral-200 file:text-neutral-800 hover:file:bg-neutral-300 dark:file:bg-coolgray-200 dark:file:text-white dark:hover:file:bg-coolgray-300 file:cursor-pointer" />
                         <div wire:loading wire:target="backupFile">
                             <span class="text-sm text-warning">Uploading...</span>
                         </div>
@@ -43,7 +43,7 @@
                         wire:model="pastedJson"
                         rows="8"
                         placeholder='{"backup_meta": {...}, "resource": {...}, ...}'
-                        class="w-full p-3 rounded border dark:border-coolgray-300 dark:bg-coolgray-200 dark:text-white font-mono text-sm resize-y"
+                        class="w-full p-3 rounded border border-neutral-300 dark:border-coolgray-300 bg-white dark:bg-coolgray-200 text-neutral-800 dark:text-white font-mono text-sm resize-y"
                     ></textarea>
                     <div class="pt-3">
                         <x-forms.button wire:click="parsePastedJson">Parse JSON</x-forms.button>
@@ -98,7 +98,7 @@
                 <div class="p-6 rounded border dark:border-coolgray-300 dark:bg-coolgray-100 bg-white">
                     <div class="flex items-center justify-between pb-3">
                         <h3>Backup Summary</h3>
-                        <span class="px-3 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">
+                        <span class="px-3 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400">
                             {{ $parsedBackup['meta']['resource_type_short'] }}
                         </span>
                     </div>
@@ -128,34 +128,34 @@
                     </div>
 
                     {{-- Sections overview --}}
-                    <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t dark:border-coolgray-300">
+                    <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-neutral-200 dark:border-coolgray-300">
                         @if(!empty($parsedBackup['environment_variables']))
-                            <span class="px-2 py-1 rounded text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200">
+                            <span class="px-2 py-1 rounded text-xs bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400">
                                 {{ count($parsedBackup['environment_variables']) }} Environment Variables
                             </span>
                         @endif
                         @if(!empty($parsedBackup['persistent_storages']))
-                            <span class="px-2 py-1 rounded text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200">
+                            <span class="px-2 py-1 rounded text-xs bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400">
                                 {{ count($parsedBackup['persistent_storages']) }} Persistent Storages
                             </span>
                         @endif
                         @if($parsedBackup['docker_compose_raw'])
-                            <span class="px-2 py-1 rounded text-xs bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200">
+                            <span class="px-2 py-1 rounded text-xs bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400">
                                 Docker Compose
                             </span>
                         @endif
                         @if($parsedBackup['custom_labels'])
-                            <span class="px-2 py-1 rounded text-xs bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-200">
+                            <span class="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400">
                                 Custom Labels
                             </span>
                         @endif
                         @if(!empty($parsedBackup['service_applications']))
-                            <span class="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">
+                            <span class="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400">
                                 {{ count($parsedBackup['service_applications']) }} Service Apps
                             </span>
                         @endif
                         @if(!empty($parsedBackup['service_databases']))
-                            <span class="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">
+                            <span class="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400">
                                 {{ count($parsedBackup['service_databases']) }} Service Databases
                             </span>
                         @endif
@@ -175,7 +175,7 @@
                         </button>
 
                         @if(in_array('env_vars', $expandedSections))
-                            <div class="px-4 pb-4 border-t dark:border-coolgray-300">
+                            <div class="px-4 pb-4 border-t border-neutral-200 dark:border-coolgray-300">
                                 {{-- Import into existing resource --}}
                                 <div class="my-4 p-4 rounded bg-gray-50 dark:bg-coolgray-200">
                                     <h4 class="pb-2 font-medium">Import into Existing Resource</h4>
@@ -216,15 +216,15 @@
                                         </thead>
                                         <tbody>
                                             @foreach($parsedBackup['environment_variables'] as $var)
-                                                <tr class="border-t dark:border-coolgray-300">
+                                                <tr class="border-t border-neutral-200 dark:border-coolgray-300">
                                                     <td class="py-2 pr-4 font-mono text-xs">{{ $var['key'] ?? '' }}</td>
                                                     <td class="py-2 pr-4 font-mono text-xs max-w-md truncate">{{ $var['value'] ?? '' }}</td>
                                                     <td class="py-2">
                                                         @if($var['is_build_time'] ?? false)
-                                                            <span class="px-1.5 py-0.5 rounded text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200">build</span>
+                                                            <span class="px-1.5 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400">build</span>
                                                         @endif
                                                         @if($var['is_preview'] ?? false)
-                                                            <span class="px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">preview</span>
+                                                            <span class="px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400">preview</span>
                                                         @endif
                                                     </td>
                                                 </tr>
@@ -234,7 +234,7 @@
                                 </div>
 
                                 {{-- Copy as .env format --}}
-                                <div class="mt-4 pt-4 border-t dark:border-coolgray-300">
+                                <div class="mt-4 pt-4 border-t border-neutral-200 dark:border-coolgray-300">
                                     <h4 class="pb-2 font-medium text-sm">Copy as .env format</h4>
                                     <div class="relative">
                                         <pre class="p-3 rounded bg-gray-100 dark:bg-coolgray-200 text-xs font-mono overflow-x-auto max-h-48">@foreach($parsedBackup['environment_variables'] as $var){{ $var['key'] ?? '' }}={{ $var['value'] ?? '' }}
@@ -258,7 +258,7 @@
                     </button>
 
                     @if(in_array('resource', $expandedSections))
-                        <div class="px-4 pb-4 border-t dark:border-coolgray-300">
+                        <div class="px-4 pb-4 border-t border-neutral-200 dark:border-coolgray-300">
                             <div class="mt-3 text-sm text-gray-600 dark:text-gray-400 pb-3">
                                 These are the full resource settings at the time of backup.
                                 Use these values as reference when recreating the resource on a new Coolify instance.
@@ -286,7 +286,7 @@
                                         @foreach($importantKeys as $key)
                                             @if(isset($resource[$key]) && filled($resource[$key]))
                                                 @php $shown[] = $key; @endphp
-                                                <tr class="border-t dark:border-coolgray-300">
+                                                <tr class="border-t border-neutral-200 dark:border-coolgray-300">
                                                     <td class="py-2 pr-4 font-mono text-xs text-gray-600 dark:text-gray-400">{{ $key }}</td>
                                                     <td class="py-2 font-mono text-xs">{{ is_array($resource[$key]) ? json_encode($resource[$key]) : $resource[$key] }}</td>
                                                 </tr>
@@ -294,7 +294,7 @@
                                         @endforeach
                                         @foreach($resource as $key => $value)
                                             @if(!in_array($key, $shown) && filled($value) && !is_array($value) && !in_array($key, ['id', 'created_at', 'updated_at', 'deleted_at']))
-                                                <tr class="border-t dark:border-coolgray-300">
+                                                <tr class="border-t border-neutral-200 dark:border-coolgray-300">
                                                     <td class="py-2 pr-4 font-mono text-xs text-gray-600 dark:text-gray-400">{{ $key }}</td>
                                                     <td class="py-2 font-mono text-xs break-all">{{ Str::limit((string) $value, 200) }}</td>
                                                 </tr>
@@ -320,7 +320,7 @@
                         </button>
 
                         @if(in_array('storages', $expandedSections))
-                            <div class="px-4 pb-4 border-t dark:border-coolgray-300">
+                            <div class="px-4 pb-4 border-t border-neutral-200 dark:border-coolgray-300">
                                 <div class="mt-3 text-sm text-gray-600 dark:text-gray-400 pb-3">
                                     These volume mounts were configured on the resource. Recreate them in the
                                     <strong>Persistent Storages</strong> section of your new resource.
@@ -336,7 +336,7 @@
                                         </thead>
                                         <tbody>
                                             @foreach($parsedBackup['persistent_storages'] as $storage)
-                                                <tr class="border-t dark:border-coolgray-300">
+                                                <tr class="border-t border-neutral-200 dark:border-coolgray-300">
                                                     <td class="py-2 pr-4 font-mono text-xs">{{ $storage['name'] ?? 'N/A' }}</td>
                                                     <td class="py-2 pr-4 font-mono text-xs">{{ $storage['mount_path'] ?? 'N/A' }}</td>
                                                     <td class="py-2 font-mono text-xs">{{ $storage['host_path'] ?? 'auto' }}</td>
@@ -363,7 +363,7 @@
                         </button>
 
                         @if(in_array('compose', $expandedSections))
-                            <div class="px-4 pb-4 border-t dark:border-coolgray-300">
+                            <div class="px-4 pb-4 border-t border-neutral-200 dark:border-coolgray-300">
                                 <div class="mt-3 text-sm text-gray-600 dark:text-gray-400 pb-3">
                                     The raw Docker Compose file for this resource. Copy and paste this when creating a new
                                     Docker Compose-based application or service.
@@ -392,7 +392,7 @@
                         </button>
 
                         @if(in_array('labels', $expandedSections))
-                            <div class="px-4 pb-4 border-t dark:border-coolgray-300">
+                            <div class="px-4 pb-4 border-t border-neutral-200 dark:border-coolgray-300">
                                 <div class="mt-3 text-sm text-gray-600 dark:text-gray-400 pb-3">
                                     Custom Docker/Traefik labels. These can be pasted into the <strong>Custom Labels</strong>
                                     section in your resource's advanced settings.
@@ -416,7 +416,7 @@
                         </button>
 
                         @if(in_array('service_sub', $expandedSections))
-                            <div class="px-4 pb-4 border-t dark:border-coolgray-300">
+                            <div class="px-4 pb-4 border-t border-neutral-200 dark:border-coolgray-300">
                                 @if(!empty($parsedBackup['service_applications']))
                                     <h4 class="mt-3 pb-2 font-medium">Service Applications ({{ count($parsedBackup['service_applications']) }})</h4>
                                     @foreach($parsedBackup['service_applications'] as $app)
@@ -460,10 +460,10 @@
                     </button>
 
                     @if(in_array('guide', $expandedSections))
-                        <div class="px-4 pb-4 border-t dark:border-coolgray-300">
+                        <div class="px-4 pb-4 border-t border-neutral-200 dark:border-coolgray-300">
                             <div class="mt-3 flex flex-col gap-4 text-sm">
                                 <div class="flex gap-3">
-                                    <span class="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200 flex items-center justify-center text-xs font-bold">1</span>
+                                    <span class="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 flex items-center justify-center text-xs font-bold">1</span>
                                     <div>
                                         <strong>Create the resource</strong>
                                         <p class="text-gray-600 dark:text-gray-400 mt-1">
@@ -481,7 +481,7 @@
                                 </div>
 
                                 <div class="flex gap-3">
-                                    <span class="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200 flex items-center justify-center text-xs font-bold">2</span>
+                                    <span class="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 flex items-center justify-center text-xs font-bold">2</span>
                                     <div>
                                         <strong>Configure resource settings</strong>
                                         <p class="text-gray-600 dark:text-gray-400 mt-1">
@@ -493,7 +493,7 @@
 
                                 @if(!empty($parsedBackup['environment_variables']))
                                     <div class="flex gap-3">
-                                        <span class="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200 flex items-center justify-center text-xs font-bold">3</span>
+                                        <span class="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 flex items-center justify-center text-xs font-bold">3</span>
                                         <div>
                                             <strong>Import environment variables</strong>
                                             <p class="text-gray-600 dark:text-gray-400 mt-1">
@@ -507,7 +507,7 @@
 
                                 @if(!empty($parsedBackup['persistent_storages']))
                                     <div class="flex gap-3">
-                                        <span class="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200 flex items-center justify-center text-xs font-bold">4</span>
+                                        <span class="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 flex items-center justify-center text-xs font-bold">4</span>
                                         <div>
                                             <strong>Recreate persistent storages</strong>
                                             <p class="text-gray-600 dark:text-gray-400 mt-1">
@@ -521,7 +521,7 @@
 
                                 @if($parsedBackup['custom_labels'])
                                     <div class="flex gap-3">
-                                        <span class="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200 flex items-center justify-center text-xs font-bold">5</span>
+                                        <span class="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 flex items-center justify-center text-xs font-bold">5</span>
                                         <div>
                                             <strong>Apply custom labels</strong>
                                             <p class="text-gray-600 dark:text-gray-400 mt-1">
@@ -533,7 +533,7 @@
                                 @endif
 
                                 <div class="flex gap-3">
-                                    <span class="flex-shrink-0 w-7 h-7 rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200 flex items-center justify-center text-xs font-bold">&#10003;</span>
+                                    <span class="flex-shrink-0 w-7 h-7 rounded-full bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 flex items-center justify-center text-xs font-bold">&#10003;</span>
                                     <div>
                                         <strong>Deploy</strong>
                                         <p class="text-gray-600 dark:text-gray-400 mt-1">

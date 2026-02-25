@@ -6,7 +6,7 @@
                 @class([
                     'px-3 py-1.5 text-sm rounded transition-colors',
                     'bg-white/10 text-white' => $mode === 'grid',
-                    'text-neutral-400 hover:text-white' => $mode !== 'grid',
+                    'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white' => $mode !== 'grid',
                 ])>
                 <svg class="w-4 h-4 inline-block mr-1 -mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="3" width="7" height="7" stroke-linecap="round" stroke-linejoin="round"/>
@@ -21,7 +21,7 @@
                 @class([
                     'px-3 py-1.5 text-sm rounded transition-colors',
                     'bg-white/10 text-white' => $mode === 'topology',
-                    'text-neutral-400 hover:text-white' => $mode !== 'topology',
+                    'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white' => $mode !== 'topology',
                 ])>
                 <svg class="w-4 h-4 inline-block mr-1 -mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="5" r="3" stroke-linecap="round" stroke-linejoin="round"/>
@@ -42,8 +42,8 @@
     </div>
 
     @if (count($nodes) === 0)
-        <div class="p-12 text-center rounded-lg bg-coolgray-200">
-            <p class="text-neutral-400">No node data available. Try refreshing.</p>
+        <div class="p-12 text-center rounded-lg bg-white dark:bg-coolgray-200 border border-neutral-200 dark:border-transparent">
+            <p class="text-neutral-600 dark:text-neutral-400">No node data available. Try refreshing.</p>
         </div>
     @elseif ($mode === 'grid')
         {{-- Grid View (Portainer-style: columns per node) --}}
@@ -53,9 +53,9 @@
                     $nodeId = $node['id'] ?? '';
                     $nodeTasks = collect($tasks)->where('node_id', $nodeId)->values();
                 @endphp
-                <div class="rounded-lg bg-coolgray-200 overflow-hidden flex flex-col">
+                <div class="rounded-lg bg-white dark:bg-coolgray-200 overflow-hidden flex flex-col border border-neutral-200 dark:border-transparent">
                     {{-- Node Header --}}
-                    <div class="px-3 py-2.5 border-b border-coolgray-300 bg-coolgray-300/50">
+                    <div class="px-3 py-2.5 border-b border-neutral-200 dark:border-coolgray-300 bg-neutral-100 dark:bg-coolgray-300/50">
                         <div class="flex items-center gap-2">
                             <span @class([
                                 'w-2 h-2 rounded-full shrink-0',
@@ -63,18 +63,18 @@
                                 'bg-red-500' => ($node['status'] ?? '') === 'down',
                                 'bg-neutral-500' => !in_array($node['status'] ?? '', ['ready', 'down']),
                             ])></span>
-                            <span class="font-medium text-sm text-white truncate">{{ $node['hostname'] ?? 'Unknown' }}</span>
+                            <span class="font-medium text-sm text-neutral-900 dark:text-white truncate">{{ $node['hostname'] ?? 'Unknown' }}</span>
                         </div>
                         <div class="flex items-center gap-2 mt-1">
                             <span @class([
                                 'px-1.5 py-0.5 text-xs rounded',
-                                'bg-blue-500/20 text-blue-400' => ($node['role'] ?? '') === 'manager',
-                                'bg-neutral-500/20 text-neutral-400' => ($node['role'] ?? '') !== 'manager',
+                                'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400' => ($node['role'] ?? '') === 'manager',
+                                'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/20 dark:text-neutral-400' => ($node['role'] ?? '') !== 'manager',
                             ])>{{ ucfirst($node['role'] ?? 'worker') }}</span>
                             @if ($node['is_leader'] ?? false)
-                                <span class="px-1.5 py-0.5 text-xs rounded bg-yellow-500/20 text-yellow-400">Leader</span>
+                                <span class="px-1.5 py-0.5 text-xs rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400">Leader</span>
                             @endif
-                            <span class="text-xs text-neutral-500">{{ $nodeTasks->count() }} tasks</span>
+                            <span class="text-xs text-neutral-600 dark:text-neutral-500">{{ $nodeTasks->count() }} tasks</span>
                         </div>
                     </div>
 
@@ -97,23 +97,23 @@
                                 'border-neutral-500 bg-neutral-500/10' => !$isRun && !$isFail && !$isPend && !$isUpd,
                             ])>
                                 <div class="flex items-center justify-between gap-1">
-                                    <span class="text-white truncate font-medium" title="{{ $task['service_name'] ?? '' }}">
+                                    <span class="text-neutral-900 dark:text-white truncate font-medium" title="{{ $task['service_name'] ?? '' }}">
                                         {{ Str::limit($task['service_name'] ?? $task['name'] ?? 'Unknown', 20) }}
                                     </span>
                                     <span @class([
                                         'shrink-0 text-xs',
-                                        'text-green-400' => $isRun,
-                                        'text-red-400' => $isFail,
-                                        'text-yellow-400' => $isPend,
-                                        'text-blue-400' => $isUpd,
-                                        'text-neutral-400' => !$isRun && !$isFail && !$isPend && !$isUpd,
+                                        'text-green-600 dark:text-green-400' => $isRun,
+                                        'text-red-600 dark:text-red-400' => $isFail,
+                                        'text-yellow-600 dark:text-yellow-400' => $isPend,
+                                        'text-blue-600 dark:text-blue-400' => $isUpd,
+                                        'text-neutral-600 dark:text-neutral-400' => !$isRun && !$isFail && !$isPend && !$isUpd,
                                     ])>
                                         {{ $task['status'] ?? '' }}
                                     </span>
                                 </div>
                             </div>
                         @empty
-                            <div class="flex items-center justify-center h-full text-neutral-500 text-xs">
+                            <div class="flex items-center justify-center h-full text-neutral-600 dark:text-neutral-500 text-xs">
                                 No tasks
                             </div>
                         @endforelse
@@ -131,7 +131,7 @@
         <div class="flex flex-col items-center gap-2">
             {{-- Manager Tier --}}
             @if ($managers->isNotEmpty())
-                <div class="text-xs text-neutral-500 uppercase tracking-wider mb-1">Managers</div>
+                <div class="text-xs text-neutral-600 dark:text-neutral-500 uppercase tracking-wider mb-1">Managers</div>
                 <div class="flex flex-wrap justify-center gap-4">
                     @foreach ($managers as $mNode)
                         @php
@@ -149,7 +149,7 @@
                             ])
                             style="min-width: {{ $scale * 160 }}px;">
                             @if ($mNode['is_leader'] ?? false)
-                                <div class="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 text-xs rounded bg-yellow-500/20 text-yellow-400 whitespace-nowrap">
+                                <div class="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 text-xs rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400 whitespace-nowrap">
                                     Leader
                                 </div>
                             @endif
@@ -159,18 +159,18 @@
                                     'bg-green-500' => ($mNode['status'] ?? '') === 'ready',
                                     'bg-red-500' => ($mNode['status'] ?? '') !== 'ready',
                                 ])></span>
-                                <span class="font-semibold text-white text-sm">{{ $mNode['hostname'] ?? 'Unknown' }}</span>
+                                <span class="font-semibold text-neutral-900 dark:text-white text-sm">{{ $mNode['hostname'] ?? 'Unknown' }}</span>
                             </div>
-                            <div class="text-xs text-neutral-400 space-y-0.5">
+                            <div class="text-xs text-neutral-600 dark:text-neutral-400 space-y-0.5">
                                 <div>{{ $cpuCores }} CPU &middot; {{ $memGb }} GB</div>
                                 <div>{{ $mTasks }} tasks</div>
                             </div>
                             <div class="mt-1.5">
                                 <span @class([
                                     'px-1.5 py-0.5 text-xs rounded',
-                                    'bg-green-500/20 text-green-400' => ($mNode['availability'] ?? '') === 'active',
-                                    'bg-yellow-500/20 text-yellow-400' => ($mNode['availability'] ?? '') === 'drain',
-                                    'bg-orange-500/20 text-orange-400' => ($mNode['availability'] ?? '') === 'pause',
+                                    'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400' => ($mNode['availability'] ?? '') === 'active',
+                                    'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400' => ($mNode['availability'] ?? '') === 'drain',
+                                    'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400' => ($mNode['availability'] ?? '') === 'pause',
                                 ])>{{ ucfirst($mNode['availability'] ?? 'unknown') }}</span>
                             </div>
                         </div>
@@ -182,16 +182,16 @@
             @if ($managers->isNotEmpty() && $workers->isNotEmpty())
                 <div class="flex items-center justify-center py-1">
                     <div class="flex flex-col items-center">
-                        <div class="w-px h-8 bg-neutral-600"></div>
+                        <div class="w-px h-8 bg-neutral-300 dark:bg-neutral-600"></div>
                         @if ($workers->count() > 1)
-                            <div class="h-px bg-neutral-600" style="width: {{ min($workers->count() * 100, 500) }}px;"></div>
+                            <div class="h-px bg-neutral-300 dark:bg-neutral-600" style="width: {{ min($workers->count() * 100, 500) }}px;"></div>
                             <div class="flex justify-between" style="width: {{ min($workers->count() * 100, 500) }}px;">
                                 @foreach ($workers as $w)
-                                    <div class="w-px h-6 bg-neutral-600"></div>
+                                    <div class="w-px h-6 bg-neutral-300 dark:bg-neutral-600"></div>
                                 @endforeach
                             </div>
                         @else
-                            <div class="w-px h-6 bg-neutral-600"></div>
+                            <div class="w-px h-6 bg-neutral-300 dark:bg-neutral-600"></div>
                         @endif
                     </div>
                 </div>
@@ -199,7 +199,7 @@
 
             {{-- Worker Tier --}}
             @if ($workers->isNotEmpty())
-                <div class="text-xs text-neutral-500 uppercase tracking-wider mb-1">Workers</div>
+                <div class="text-xs text-neutral-600 dark:text-neutral-500 uppercase tracking-wider mb-1">Workers</div>
                 <div class="flex flex-wrap justify-center gap-4">
                     @foreach ($workers as $wNode)
                         @php
@@ -222,18 +222,18 @@
                                     'bg-green-500' => ($wNode['status'] ?? '') === 'ready',
                                     'bg-red-500' => ($wNode['status'] ?? '') !== 'ready',
                                 ])></span>
-                                <span class="font-semibold text-white text-sm">{{ $wNode['hostname'] ?? 'Unknown' }}</span>
+                                <span class="font-semibold text-neutral-900 dark:text-white text-sm">{{ $wNode['hostname'] ?? 'Unknown' }}</span>
                             </div>
-                            <div class="text-xs text-neutral-400 space-y-0.5">
+                            <div class="text-xs text-neutral-600 dark:text-neutral-400 space-y-0.5">
                                 <div>{{ $wCpuCores }} CPU &middot; {{ $wMemGb }} GB</div>
                                 <div>{{ $wTasks }} tasks</div>
                             </div>
                             <div class="mt-1.5">
                                 <span @class([
                                     'px-1.5 py-0.5 text-xs rounded',
-                                    'bg-green-500/20 text-green-400' => ($wNode['availability'] ?? '') === 'active',
-                                    'bg-yellow-500/20 text-yellow-400' => ($wNode['availability'] ?? '') === 'drain',
-                                    'bg-orange-500/20 text-orange-400' => ($wNode['availability'] ?? '') === 'pause',
+                                    'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400' => ($wNode['availability'] ?? '') === 'active',
+                                    'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400' => ($wNode['availability'] ?? '') === 'drain',
+                                    'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400' => ($wNode['availability'] ?? '') === 'pause',
                                 ])>{{ ucfirst($wNode['availability'] ?? 'unknown') }}</span>
                             </div>
                         </div>
@@ -242,7 +242,7 @@
             @endif
 
             @if ($managers->isEmpty() && $workers->isEmpty())
-                <div class="p-12 text-center text-neutral-400">No nodes found.</div>
+                <div class="p-12 text-center text-neutral-600 dark:text-neutral-400">No nodes found.</div>
             @endif
         </div>
     @endif

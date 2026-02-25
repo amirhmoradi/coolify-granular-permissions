@@ -67,8 +67,8 @@
                     @endif
                 @endif
             @else
-                <div class="p-6 bg-red-500/10 rounded-lg border border-red-500/20">
-                    <div class="text-red-500 font-medium mb-4">
+                <div class="p-6 rounded-lg border border-red-200 dark:border-red-500/20 bg-red-100 dark:bg-red-500/10">
+                    <div class="text-red-700 dark:text-red-500 font-medium mb-4">
                         Instance Backup is currently disabled because the localhost server is not properly validated.
                         Please validate your server to enable Instance Backup.
                     </div>

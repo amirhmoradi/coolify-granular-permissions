@@ -22,7 +22,7 @@
             @endphp
             <div class="flex flex-col gap-0 mb-4">
                 {{-- Schedule summary row --}}
-                <div class="flex items-center justify-between p-3 rounded-t border dark:border-coolgray-300 dark:bg-coolgray-100 bg-white
+                <div class="flex items-center justify-between p-3 rounded-t border border-neutral-200 dark:border-coolgray-300 dark:bg-coolgray-100 bg-white
                     {{ $expandedBackupId === $backup['id'] ? 'border-b-0' : 'rounded-b' }}">
                     <div class="flex items-center gap-3">
                         <span class="px-2 py-0.5 text-xs font-medium rounded {{ $typeColors }}">
@@ -59,7 +59,7 @@
 
                 {{-- Expanded details panel (settings only, no executions) --}}
                 @if($expandedBackupId === $backup['id'])
-                    <div class="border border-t-0 dark:border-coolgray-300 rounded-b p-4 dark:bg-coolgray-100 bg-white">
+                    <div class="border border-t-0 border-neutral-200 dark:border-coolgray-300 rounded-b p-4 dark:bg-coolgray-100 bg-white">
                         <form wire:submit="saveBackupSettings">
                             <div class="flex gap-2 pb-3">
                                 <h3>Scheduled Backup</h3>
@@ -282,7 +282,7 @@
 
                         {{-- Error/log message --}}
                         @if ($execution['message'])
-                            <div class="mt-2 p-2 bg-gray-100 dark:bg-coolgray-200 rounded-sm">
+                            <div class="mt-2 p-2 rounded-sm border border-neutral-200 dark:border-transparent bg-neutral-100 dark:bg-coolgray-200">
                                 <pre class="whitespace-pre-wrap text-sm">{{ $execution['message'] }}</pre>
                             </div>
                         @endif
@@ -297,7 +297,7 @@
                         </div>
                     </div>
                 @empty
-                    <div class="p-4 bg-gray-100 dark:bg-coolgray-100 rounded-sm">No executions found.</div>
+                    <div class="p-4 rounded-sm border border-neutral-200 dark:border-transparent bg-neutral-100 dark:bg-coolgray-100">No executions found.</div>
                 @endforelse
             </div>
         </div>
@@ -306,7 +306,7 @@
     {{-- ============================================================ --}}
     {{-- NEW BACKUP SCHEDULE form                                     --}}
     {{-- ============================================================ --}}
-    <div class="flex flex-col gap-2 p-4 rounded border dark:border-coolgray-300 dark:bg-coolgray-100 bg-white mt-4">
+    <div class="flex flex-col gap-2 p-4 rounded border border-neutral-200 dark:border-coolgray-300 dark:bg-coolgray-100 bg-white mt-4">
         <h3>New Backup Schedule</h3>
         <div class="pb-2 text-sm text-gray-600 dark:text-gray-400">{!! $description !!}</div>
 

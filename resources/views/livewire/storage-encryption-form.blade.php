@@ -33,7 +33,7 @@
         />
 
         @if($encryptionEnabled)
-            <div class="flex flex-col gap-2 p-4 rounded border dark:border-coolgray-300 dark:bg-coolgray-100">
+            <div class="flex flex-col gap-2 p-4 rounded border border-neutral-200 dark:border-coolgray-300 bg-white dark:bg-coolgray-100">
                 <div class="flex gap-2">
                     <x-forms.input
                         type="password"

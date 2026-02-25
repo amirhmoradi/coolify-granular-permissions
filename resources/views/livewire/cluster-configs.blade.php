@@ -1,8 +1,8 @@
 <div>
     <div class="flex items-center justify-between pb-4">
         <div>
-            <h3 class="font-semibold text-white">Swarm Configs</h3>
-            <p class="text-sm text-neutral-400 mt-0.5">Non-sensitive configuration data that can be mounted into service containers.</p>
+            <h3 class="font-semibold text-neutral-900 dark:text-white">Swarm Configs</h3>
+            <p class="text-sm text-neutral-600 dark:text-neutral-400 mt-0.5">Non-sensitive configuration data that can be mounted into service containers.</p>
         </div>
         <div class="flex items-center gap-2">
             <x-forms.button wire:click="refreshConfigs">
@@ -25,21 +25,21 @@
 
     {{-- Create Form --}}
     @if ($showCreateForm)
-        <div class="p-4 mb-4 rounded-lg bg-coolgray-200 border border-coolgray-300">
-            <h4 class="font-medium text-white text-sm pb-3">Create New Config</h4>
+        <div class="p-4 mb-4 rounded-lg bg-white dark:bg-coolgray-200 border border-neutral-200 dark:border-coolgray-300">
+            <h4 class="font-medium text-neutral-900 dark:text-white text-sm pb-3">Create New Config</h4>
             <div class="space-y-3">
                 <x-forms.input id="newName" label="Config Name" required
                     placeholder="e.g., nginx-config"
                     helper="Alphanumeric, dots, dashes, and underscores only." />
                 <div>
-                    <label class="block text-sm font-medium text-neutral-300 pb-1">Config Data</label>
+                    <label class="block text-sm font-medium text-neutral-600 dark:text-neutral-300 pb-1">Config Data</label>
                     <textarea wire:model="newData" rows="8"
-                        class="w-full px-3 py-2 text-sm rounded bg-black/50 border border-coolgray-300 text-green-400 font-mono focus:border-blue-500 focus:outline-none"
+                        class="w-full px-3 py-2 text-sm rounded bg-neutral-900 dark:bg-black/50 border border-neutral-200 dark:border-coolgray-300 text-green-600 dark:text-green-400 font-mono focus:border-blue-500 focus:outline-none"
                         placeholder="Paste your configuration content here..."></textarea>
                 </div>
                 <div class="flex gap-2 pt-1">
                     <x-forms.button wire:click="createConfig">Create Config</x-forms.button>
-                    <button wire:click="$set('showCreateForm', false)" class="px-3 py-1.5 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
+                    <button wire:click="$set('showCreateForm', false)" class="px-3 py-1.5 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors">Cancel</button>
                 </div>
             </div>
         </div>
@@ -47,54 +47,54 @@
 
     {{-- View Config Panel --}}
     @if ($viewingConfigId)
-        <div class="p-4 mb-4 rounded-lg bg-coolgray-200 border border-blue-500/30">
+        <div class="p-4 mb-4 rounded-lg bg-white dark:bg-coolgray-200 border border-blue-200 dark:border-blue-500/30">
             <div class="flex items-center justify-between pb-3">
-                <h4 class="font-medium text-white text-sm">
-                    Config: <span class="font-mono text-blue-400">{{ $viewingConfigName }}</span>
+                <h4 class="font-medium text-neutral-900 dark:text-white text-sm">
+                    Config: <span class="font-mono text-blue-600 dark:text-blue-400">{{ $viewingConfigName }}</span>
                 </h4>
-                <button wire:click="closeViewer" class="text-neutral-400 hover:text-white transition-colors">
+                <button wire:click="closeViewer" class="text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors">
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
             </div>
-            <pre class="p-3 rounded bg-black/50 border border-coolgray-300 text-sm font-mono text-green-400 overflow-x-auto max-h-[400px] overflow-y-auto whitespace-pre-wrap">{{ $viewingConfigData ?? 'Unable to retrieve config data.' }}</pre>
+            <pre class="p-3 rounded bg-neutral-900 dark:bg-black/50 border border-neutral-200 dark:border-coolgray-300 text-sm font-mono text-green-600 dark:text-green-400 overflow-x-auto max-h-[400px] overflow-y-auto whitespace-pre-wrap">{{ $viewingConfigData ?? 'Unable to retrieve config data.' }}</pre>
         </div>
     @endif
 
     {{-- Configs Table --}}
     @if (count($configs) === 0)
-        <div class="p-12 text-center rounded-lg bg-coolgray-200">
-            <svg class="w-10 h-10 mx-auto text-neutral-500 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <div class="p-12 text-center rounded-lg bg-white dark:bg-coolgray-200 border border-neutral-200 dark:border-transparent">
+            <svg class="w-10 h-10 mx-auto text-neutral-600 dark:text-neutral-500 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <p class="text-neutral-400">No configs in this cluster.</p>
-            <p class="text-sm text-neutral-500 mt-1">Configs store non-sensitive data like configuration files that services can mount.</p>
+            <p class="text-neutral-600 dark:text-neutral-400">No configs in this cluster.</p>
+            <p class="text-sm text-neutral-600 dark:text-neutral-500 mt-1">Configs store non-sensitive data like configuration files that services can mount.</p>
         </div>
     @else
-        <div class="rounded-lg bg-coolgray-200 overflow-hidden">
+        <div class="rounded-lg bg-white dark:bg-coolgray-200 overflow-hidden border border-neutral-200 dark:border-transparent">
             <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                     <thead>
-                        <tr class="bg-coolgray-300">
-                            <th class="px-4 py-2.5 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider">Name</th>
-                            <th class="px-4 py-2.5 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider">Created</th>
-                            <th class="px-4 py-2.5 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider">Labels</th>
-                            <th class="px-4 py-2.5 text-right text-xs font-medium text-neutral-400 uppercase tracking-wider">Actions</th>
+                        <tr class="bg-neutral-100 dark:bg-coolgray-300">
+                            <th class="px-4 py-2.5 text-left text-xs font-medium text-neutral-600 dark:text-neutral-400 uppercase tracking-wider">Name</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-medium text-neutral-600 dark:text-neutral-400 uppercase tracking-wider">Created</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-medium text-neutral-600 dark:text-neutral-400 uppercase tracking-wider">Labels</th>
+                            <th class="px-4 py-2.5 text-right text-xs font-medium text-neutral-600 dark:text-neutral-400 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-coolgray-300">
+                    <tbody class="divide-y divide-neutral-200 dark:divide-coolgray-300">
                         @foreach ($configs as $config)
-                            <tr class="hover:bg-coolgray-300/20 transition-colors">
-                                <td class="px-4 py-3 font-medium text-white">
+                            <tr class="hover:bg-neutral-50 dark:hover:bg-coolgray-300/20 transition-colors">
+                                <td class="px-4 py-3 font-medium text-neutral-900 dark:text-white">
                                     <div class="flex items-center gap-2">
-                                        <svg class="w-4 h-4 text-neutral-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <svg class="w-4 h-4 text-neutral-600 dark:text-neutral-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                             <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round"/>
                                         </svg>
                                         {{ $config['name'] ?? 'Unknown' }}
                                     </div>
                                 </td>
-                                <td class="px-4 py-3 text-neutral-400 text-xs">
+                                <td class="px-4 py-3 text-neutral-600 dark:text-neutral-400 text-xs">
                                     @if ($created = ($config['created_at'] ?? null))
                                         {{ \Carbon\Carbon::parse($created)->format('M d, Y H:i') }}
                                     @else
@@ -106,7 +106,7 @@
                                     @if (is_array($labels) && count($labels) > 0)
                                         <div class="flex flex-wrap gap-1">
                                             @foreach (array_slice($labels, 0, 3, true) as $k => $v)
-                                                <span class="px-1.5 py-0.5 text-xs rounded bg-coolgray-300 text-neutral-400 font-mono">
+                                                <span class="px-1.5 py-0.5 text-xs rounded bg-neutral-100 text-neutral-700 dark:bg-coolgray-300 dark:text-neutral-400 font-mono">
                                                     {{ $k }}={{ Str::limit($v, 15) }}
                                                 </span>
                                             @endforeach
@@ -115,20 +115,20 @@
                                             @endif
                                         </div>
                                     @else
-                                        <span class="text-neutral-500 text-xs">-</span>
+                                        <span class="text-neutral-600 dark:text-neutral-500 text-xs">-</span>
                                     @endif
                                 </td>
                                 <td class="px-4 py-3 text-right">
                                     <div class="flex items-center justify-end gap-1">
                                         <button
                                             wire:click="viewConfig('{{ $config['id'] ?? '' }}')"
-                                            class="px-2 py-1 text-xs rounded text-blue-400 hover:bg-blue-500/20 transition-colors">
+                                            class="px-2 py-1 text-xs rounded text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors">
                                             View
                                         </button>
                                         <button
                                             wire:click="removeConfig('{{ $config['id'] ?? '' }}')"
                                             wire:confirm="Remove config '{{ $config['name'] ?? '' }}'? Services using this config will fail on next restart."
-                                            class="px-2 py-1 text-xs rounded text-red-400 hover:bg-red-500/20 transition-colors">
+                                            class="px-2 py-1 text-xs rounded text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors">
                                             Remove
                                         </button>
                                     </div>

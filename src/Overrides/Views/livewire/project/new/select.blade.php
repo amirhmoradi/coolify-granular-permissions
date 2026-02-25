@@ -80,7 +80,7 @@
                             <span class="text-sm truncate"
                                 x-text="selectedSource === '' ? 'Filter by source' : (selectedSource === '__official__' ? 'Coolify Official' : selectedSource)"
                                 :class="selectedSource === '' ? 'text-neutral-400 dark:text-neutral-600' : 'text-black dark:text-white'"></span>
-                            <svg class="w-4 h-4 transition-transform text-neutral-400 shrink-0"
+                            <svg class="w-4 h-4 transition-transform text-neutral-600 dark:text-neutral-400 shrink-0"
                                 :class="{ 'rotate-180': openSourceDropdown }" fill="none" stroke="currentColor"
                                 viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -214,7 +214,7 @@
                                 {{-- Coolify Enhanced: Custom template source label --}}
                                 <template x-if="service._source">
                                     <span style="top: 0; right: 0; max-width: 8rem; font-size: 10px; line-height: 1.2; pointer-events: none;"
-                                        class="absolute px-1.5 py-0.5 font-medium rounded bg-coolgray-200 dark:bg-coolgray-300 text-neutral-500 dark:text-neutral-400 border border-neutral-300 dark:border-coolgray-400 truncate"
+                                        class="absolute px-1.5 py-0.5 font-medium rounded bg-neutral-200 dark:bg-coolgray-300 text-neutral-500 dark:text-neutral-400 border border-neutral-300 dark:border-coolgray-400 truncate"
                                         x-text="service._source"
                                         :title="service._source"></span>
                                 </template>

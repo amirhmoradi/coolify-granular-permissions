@@ -4,19 +4,19 @@
 
     @if ($isSwarmServer)
         <div class="flex items-center gap-2 pb-2">
-            <span class="px-2 py-0.5 text-xs rounded bg-cyan-500/20 text-cyan-400">Swarm {{ $isSwarmManager ? 'Manager' : 'Worker' }}</span>
-            <span class="text-xs text-neutral-400">Networks use overlay driver for multi-host communication.</span>
+            <span class="px-2 py-0.5 text-xs rounded bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-400">Swarm {{ $isSwarmManager ? 'Manager' : 'Worker' }}</span>
+            <span class="text-xs text-neutral-600 dark:text-neutral-400">Networks use overlay driver for multi-host communication.</span>
         </div>
     @endif
 
     {{-- Tab navigation --}}
     <div class="flex gap-2 pb-4">
         <x-forms.button wire:click="switchTab('managed')"
-            class="{{ $activeTab === 'managed' ? '' : 'bg-coolgray-200' }}">
+            class="{{ $activeTab === 'managed' ? '' : 'bg-neutral-200 dark:bg-coolgray-200' }}">
             Managed Networks
         </x-forms.button>
         <x-forms.button wire:click="switchTab('docker')"
-            class="{{ $activeTab === 'docker' ? '' : 'bg-coolgray-200' }}">
+            class="{{ $activeTab === 'docker' ? '' : 'bg-neutral-200 dark:bg-coolgray-200' }}">
             Docker Networks
         </x-forms.button>
         <x-forms.button wire:click="syncNetworks">
@@ -26,11 +26,11 @@
 
     {{-- Proxy Isolation Panel --}}
     @if ($proxyIsolationEnabled)
-        <div class="p-4 mb-4 bg-coolgray-100 rounded border border-purple-500/30">
+        <div class="p-4 mb-4 bg-white dark:bg-coolgray-100 rounded border border-purple-200 dark:border-purple-500/30">
             <div class="flex items-center justify-between pb-2">
                 <div>
-                    <h3 class="font-bold text-purple-400">Proxy Network Isolation</h3>
-                    <div class="text-xs text-neutral-400 mt-1">
+                    <h3 class="font-bold text-purple-600 dark:text-purple-400">Proxy Network Isolation</h3>
+                    <div class="text-xs text-neutral-600 dark:text-neutral-400 mt-1">
                         Dedicated proxy network ensures the reverse proxy only accesses resources with FQDNs.
                     </div>
                 </div>
@@ -42,7 +42,7 @@
             </div>
 
             @if ($proxyNetwork)
-                <div class="text-sm text-neutral-300 mt-2">
+                <div class="text-sm text-neutral-600 dark:text-neutral-300 mt-2">
                     <span class="font-mono text-xs">{{ $proxyNetwork->docker_network_name }}</span>
                     <span class="text-neutral-500 ml-2">{{ $proxyNetwork->connectedContainerCount() }} connected</span>
                 </div>
@@ -86,44 +86,44 @@
         {{-- List of managed networks --}}
         <div class="flex flex-col gap-2">
             @forelse ($managedNetworks as $network)
-                <div class="p-4 bg-coolgray-100 rounded">
+                <div class="p-4 bg-white dark:bg-coolgray-100 rounded border border-neutral-200 dark:border-transparent">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-4">
                             <div>
                                 <span class="font-bold">{{ $network->name }}</span>
-                                <span class="text-xs text-neutral-400 ml-2">{{ $network->docker_network_name }}</span>
+                                <span class="text-xs text-neutral-600 dark:text-neutral-400 ml-2">{{ $network->docker_network_name }}</span>
                             </div>
                             {{-- Scope badge --}}
                             <span class="px-2 py-0.5 text-xs rounded
-                                @if($network->scope === 'environment') bg-blue-500/20 text-blue-400
-                                @elseif($network->scope === 'shared') bg-green-500/20 text-green-400
-                                @elseif($network->scope === 'proxy') bg-purple-500/20 text-purple-400
-                                @elseif($network->scope === 'system') bg-neutral-500/20 text-neutral-400
+                                @if($network->scope === 'environment') bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400
+                                @elseif($network->scope === 'shared') bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400
+                                @elseif($network->scope === 'proxy') bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400
+                                @elseif($network->scope === 'system') bg-neutral-100 text-neutral-700 dark:bg-neutral-500/20 dark:text-neutral-400
                                 @endif">
                                 {{ ucfirst($network->scope) }}
                             </span>
                             {{-- Driver badge --}}
                             <span class="px-2 py-0.5 text-xs rounded
-                                @if($network->driver === 'overlay') bg-cyan-500/20 text-cyan-400
-                                @else bg-neutral-500/20 text-neutral-400
+                                @if($network->driver === 'overlay') bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-400
+                                @else bg-neutral-100 text-neutral-700 dark:bg-neutral-500/20 dark:text-neutral-400
                                 @endif">
                                 {{ $network->driver }}
                             </span>
                             @if($network->is_encrypted_overlay)
-                                <span class="px-2 py-0.5 text-xs rounded bg-yellow-500/20 text-yellow-400">Encrypted</span>
+                                <span class="px-2 py-0.5 text-xs rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400">Encrypted</span>
                             @endif
                             {{-- Status badge --}}
                             <span class="px-2 py-0.5 text-xs rounded
                                 @if($network->status === 'active') bg-success/20 text-success
                                 @elseif($network->status === 'pending') bg-warning/20 text-warning
                                 @elseif($network->status === 'error') bg-error/20 text-error
-                                @else bg-neutral-500/20 text-neutral-400
+                                @else bg-neutral-100 text-neutral-700 dark:bg-neutral-500/20 dark:text-neutral-400
                                 @endif">
                                 {{ ucfirst($network->status) }}
                             </span>
                         </div>
                         <div class="flex items-center gap-2">
-                            <span class="text-xs text-neutral-400">
+                            <span class="text-xs text-neutral-600 dark:text-neutral-400">
                                 {{ $network->connectedContainerCount() }} connected
                             </span>
                             @if (!in_array($network->scope, ['environment', 'system']))
@@ -142,24 +142,24 @@
                     @endif
                 </div>
             @empty
-                <div class="text-neutral-400">No managed networks found. Enable network management in Settings to get started.</div>
+                <div class="text-neutral-600 dark:text-neutral-400">No managed networks found. Enable network management in Settings to get started.</div>
             @endforelse
         </div>
     @else
         {{-- Docker Networks tab --}}
         <div class="flex flex-col gap-2">
             @forelse ($dockerNetworks as $dn)
-                <div class="p-4 bg-coolgray-100 rounded">
+                <div class="p-4 bg-white dark:bg-coolgray-100 rounded border border-neutral-200 dark:border-transparent">
                     <div class="flex items-center justify-between">
                         <div>
                             <span class="font-bold">{{ $dn['Name'] ?? 'Unknown' }}</span>
-                            <span class="text-xs text-neutral-400 ml-2">{{ $dn['Driver'] ?? '' }} / {{ $dn['Scope'] ?? '' }}</span>
+                            <span class="text-xs text-neutral-600 dark:text-neutral-400 ml-2">{{ $dn['Driver'] ?? '' }} / {{ $dn['Scope'] ?? '' }}</span>
                         </div>
                         <span class="text-xs text-neutral-500 font-mono">{{ Str::limit($dn['ID'] ?? '', 12) }}</span>
                     </div>
                 </div>
             @empty
-                <div class="text-neutral-400">Click "Sync from Docker" to load Docker networks.</div>
+                <div class="text-neutral-600 dark:text-neutral-400">Click "Sync from Docker" to load Docker networks.</div>
             @endforelse
         </div>
     @endif

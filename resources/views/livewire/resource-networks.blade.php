@@ -6,21 +6,21 @@
     <div class="flex flex-col gap-2 pb-4">
         <h3>Connected Networks</h3>
         @forelse ($currentNetworks as $rn)
-            <div class="p-4 bg-coolgray-100 rounded">
+            <div class="p-4 bg-white dark:bg-coolgray-100 rounded border border-neutral-200 dark:border-transparent">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3">
                         <span class="font-bold">{{ $rn->managedNetwork->name }}</span>
-                        <span class="text-xs text-neutral-400">{{ $rn->managedNetwork->docker_network_name }}</span>
+                        <span class="text-xs text-neutral-600 dark:text-neutral-400">{{ $rn->managedNetwork->docker_network_name }}</span>
                         {{-- Scope badge --}}
                         <span class="px-2 py-0.5 text-xs rounded
-                            @if($rn->managedNetwork->scope === 'environment') bg-blue-500/20 text-blue-400
-                            @elseif($rn->managedNetwork->scope === 'shared') bg-green-500/20 text-green-400
-                            @elseif($rn->managedNetwork->scope === 'proxy') bg-purple-500/20 text-purple-400
+                            @if($rn->managedNetwork->scope === 'environment') bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400
+                            @elseif($rn->managedNetwork->scope === 'shared') bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400
+                            @elseif($rn->managedNetwork->scope === 'proxy') bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400
                             @endif">
                             {{ ucfirst($rn->managedNetwork->scope) }}
                         </span>
                         @if ($rn->is_auto_attached)
-                            <span class="px-2 py-0.5 text-xs rounded bg-neutral-500/20 text-neutral-400">Auto</span>
+                            <span class="px-2 py-0.5 text-xs rounded bg-neutral-100 text-neutral-700 dark:bg-neutral-500/20 dark:text-neutral-400">Auto</span>
                         @endif
                         {{-- Connection status --}}
                         @if ($rn->is_connected)
@@ -31,7 +31,7 @@
                     </div>
                     <div class="flex items-center gap-2">
                         @if ($rn->ipv4_address)
-                            <span class="text-xs text-neutral-400 font-mono">{{ $rn->ipv4_address }}</span>
+                            <span class="text-xs text-neutral-600 dark:text-neutral-400 font-mono">{{ $rn->ipv4_address }}</span>
                         @endif
                         @if (!$rn->is_connected)
                             <x-forms.button wire:click="reconnect({{ $rn->id }})">Reconnect</x-forms.button>
@@ -52,13 +52,13 @@
                 @endif
             </div>
         @empty
-            <div class="text-neutral-400">Not connected to any managed networks.</div>
+            <div class="text-neutral-600 dark:text-neutral-400">Not connected to any managed networks.</div>
         @endforelse
     </div>
 
     {{-- Add to shared network --}}
     @if ($availableNetworks->isNotEmpty())
-        <div class="pt-4 border-t border-coolgray-200">
+        <div class="pt-4 border-t border-neutral-200 dark:border-coolgray-200">
             <h3 class="pb-2">Add to Shared Network</h3>
             <form wire:submit="addToNetwork" class="flex gap-2 items-end">
                 <x-forms.select id="selectedNetworkId" label="Select Network">

@@ -6,17 +6,17 @@
             $totalCount = $taskCollection->count();
             $allRunning = $runningCount === $totalCount && $totalCount > 0;
         @endphp
-        <div class="rounded-lg bg-coolgray-200 p-3" wire:poll.15s="loadTasks">
+        <div class="rounded-lg bg-white dark:bg-coolgray-200 p-3 border border-neutral-200 dark:border-transparent" wire:poll.15s="loadTasks">
             <div class="flex items-center gap-2 mb-2">
-                <svg class="w-4 h-4 text-neutral-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg class="w-4 h-4 text-neutral-600 dark:text-neutral-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
-                <span class="text-sm font-medium text-neutral-300">Swarm:</span>
+                <span class="text-sm font-medium text-neutral-600 dark:text-neutral-300">Swarm:</span>
                 <span @class([
                     'text-sm font-medium',
-                    'text-green-400' => $allRunning,
-                    'text-yellow-400' => !$allRunning && $runningCount > 0,
-                    'text-red-400' => $runningCount === 0,
+                    'text-green-600 dark:text-green-400' => $allRunning,
+                    'text-yellow-600 dark:text-yellow-400' => !$allRunning && $runningCount > 0,
+                    'text-red-600 dark:text-red-400' => $runningCount === 0,
                 ])>
                     {{ $runningCount }}/{{ $totalCount }} tasks running
                 </span>
@@ -38,16 +38,16 @@
                             'bg-yellow-500' => $isPending,
                             'bg-neutral-500' => !$isRunning && !$isFailed && !$isPending,
                         ])></span>
-                        <span class="text-neutral-400 font-mono truncate" title="{{ $task['id'] ?? '' }}">
+                        <span class="text-neutral-600 dark:text-neutral-400 font-mono truncate" title="{{ $task['id'] ?? '' }}">
                             {{ Str::limit($task['id'] ?? '', 10) }}
                         </span>
-                        <span class="text-neutral-500">{{ $task['node'] ?? '-' }}</span>
+                        <span class="text-neutral-600 dark:text-neutral-500">{{ $task['node'] ?? '-' }}</span>
                         <span @class([
                             'px-1 py-0.5 rounded text-xs ml-auto shrink-0',
-                            'bg-green-500/20 text-green-400' => $isRunning,
-                            'bg-red-500/20 text-red-400' => $isFailed,
-                            'bg-yellow-500/20 text-yellow-400' => $isPending,
-                            'bg-neutral-500/20 text-neutral-400' => !$isRunning && !$isFailed && !$isPending,
+                            'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400' => $isRunning,
+                            'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400' => $isFailed,
+                            'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400' => $isPending,
+                            'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/20 dark:text-neutral-400' => !$isRunning && !$isFailed && !$isPending,
                         ])>
                             {{ $task['status'] ?? 'unknown' }}
                         </span>

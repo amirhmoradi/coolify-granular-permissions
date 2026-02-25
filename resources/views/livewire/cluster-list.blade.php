@@ -2,7 +2,7 @@
     <div class="flex items-center justify-between pb-6">
         <div>
             <h2 class="text-xl font-bold">Clusters</h2>
-            <div class="text-sm text-neutral-400 mt-1">Manage Docker Swarm clusters across your infrastructure.</div>
+            <div class="text-sm text-neutral-600 dark:text-neutral-400 mt-1">Manage Docker Swarm clusters across your infrastructure.</div>
         </div>
         <div class="flex gap-2">
             <x-forms.button wire:click="autoDetect">
@@ -15,21 +15,21 @@
     </div>
 
     @if (count($clusters) === 0)
-        <div class="p-12 text-center rounded border border-dashed border-coolgray-300">
-            <svg class="w-12 h-12 mx-auto text-neutral-500 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <div class="p-12 text-center rounded border border-dashed border-neutral-200 dark:border-coolgray-300">
+            <svg class="w-12 h-12 mx-auto text-neutral-600 dark:text-neutral-500 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M5 12H3l9-9 9 9h-2M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" stroke-linecap="round" stroke-linejoin="round"/>
                 <path d="M9 21v-6a2 2 0 012-2h2a2 2 0 012 2v6" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <p class="text-neutral-400 text-lg mb-2">No clusters found.</p>
-            <p class="text-neutral-500 text-sm">
+            <p class="text-neutral-600 dark:text-neutral-400 text-lg mb-2">No clusters found.</p>
+            <p class="text-neutral-600 dark:text-neutral-500 text-sm">
                 Mark a server as "Swarm Manager" in its settings and click
-                <strong class="text-neutral-400">Auto-detect from Servers</strong> to get started.
+                <strong class="text-neutral-600 dark:text-neutral-400">Auto-detect from Servers</strong> to get started.
             </p>
         </div>
     @else
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             @foreach ($clusters as $cluster)
-                <div class="relative group rounded-lg bg-coolgray-200 hover:bg-coolgray-300/70 transition-colors">
+                <div class="relative group rounded-lg bg-white dark:bg-coolgray-200 hover:bg-neutral-50 dark:hover:bg-coolgray-300/70 transition-colors border border-neutral-200 dark:border-transparent">
                     <a href="/cluster/{{ $cluster['uuid'] }}" class="block p-5">
                         <div class="flex items-center gap-3 mb-3">
                             <span @class([
@@ -39,13 +39,13 @@
                                 'bg-red-500' => ($cluster['status'] ?? 'unknown') === 'unreachable',
                                 'bg-neutral-500' => !in_array($cluster['status'] ?? 'unknown', ['healthy', 'degraded', 'unreachable']),
                             ])></span>
-                            <h3 class="font-semibold text-white truncate">{{ $cluster['name'] }}</h3>
-                            <span class="px-2 py-0.5 text-xs rounded bg-coolgray-300 text-neutral-400 shrink-0">
+                            <h3 class="font-semibold text-neutral-900 dark:text-white truncate">{{ $cluster['name'] }}</h3>
+                            <span class="px-2 py-0.5 text-xs rounded bg-neutral-100 text-neutral-700 dark:bg-coolgray-300 dark:text-neutral-400 shrink-0">
                                 {{ ucfirst($cluster['type'] ?? 'swarm') }}
                             </span>
                         </div>
 
-                        <div class="flex items-center gap-4 text-sm text-neutral-400 mb-2">
+                        <div class="flex items-center gap-4 text-sm text-neutral-600 dark:text-neutral-400 mb-2">
                             <span class="flex items-center gap-1">
                                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <rect x="2" y="3" width="20" height="14" rx="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -62,7 +62,7 @@
                         </div>
 
                         <div class="flex items-center justify-between">
-                            <span class="text-xs text-neutral-500">
+                            <span class="text-xs text-neutral-600 dark:text-neutral-500">
                                 @if ($syncTime = data_get($cluster, 'metadata.last_sync_at'))
                                     Last sync: {{ \Carbon\Carbon::parse($syncTime)->diffForHumans() }}
                                 @else
@@ -71,10 +71,10 @@
                             </span>
                             <span @class([
                                 'px-2 py-0.5 text-xs rounded',
-                                'bg-green-500/20 text-green-400' => ($cluster['status'] ?? 'unknown') === 'healthy',
-                                'bg-yellow-500/20 text-yellow-400' => ($cluster['status'] ?? 'unknown') === 'degraded',
-                                'bg-red-500/20 text-red-400' => ($cluster['status'] ?? 'unknown') === 'unreachable',
-                                'bg-neutral-500/20 text-neutral-400' => !in_array($cluster['status'] ?? 'unknown', ['healthy', 'degraded', 'unreachable']),
+                                'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400' => ($cluster['status'] ?? 'unknown') === 'healthy',
+                                'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400' => ($cluster['status'] ?? 'unknown') === 'degraded',
+                                'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400' => ($cluster['status'] ?? 'unknown') === 'unreachable',
+                                'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/20 dark:text-neutral-400' => !in_array($cluster['status'] ?? 'unknown', ['healthy', 'degraded', 'unreachable']),
                             ])>
                                 {{ ucfirst($cluster['status'] ?? 'unknown') }}
                             </span>

@@ -242,7 +242,7 @@
                                     </div>
                                     <div class="flex flex-col gap-2 mt-2">
                                         <h4 class="text-sm font-medium">Port Mappings</h4>
-                                        <p class="text-xs text-neutral-400">Configure which ports to expose publicly.</p>
+                                        <p class="text-xs text-neutral-600 dark:text-neutral-400">Configure which ports to expose publicly.</p>
                                         @foreach ($proxyPorts as $internalPort => $config)
                                             <div class="flex items-center gap-4">
                                                 <div class="w-64">

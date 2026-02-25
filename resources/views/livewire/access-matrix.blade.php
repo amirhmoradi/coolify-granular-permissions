@@ -187,7 +187,7 @@
                                             <span class="font-medium text-sm text-black dark:text-white truncate max-w-[180px]" title="{{ $user['name'] }}">
                                                 {{ $user['name'] }}
                                             </span>
-                                            <span class="text-xs text-neutral-500 dark:text-neutral-500 truncate max-w-[180px]" title="{{ $user['email'] }}">
+                                            <span class="text-xs text-neutral-600 dark:text-neutral-400 truncate max-w-[180px]" title="{{ $user['email'] }}">
                                                 {{ $user['email'] }}
                                             </span>
                                         </div>
@@ -197,17 +197,17 @@
                                     <td class="sticky left-[200px] z-10 bg-white dark:bg-coolgray-100 px-3 py-2.5 text-center border-r border-neutral-200 dark:border-coolgray-300">
                                         @php
                                             $roleBadge = match($user['role']) {
-                                                'owner' => 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700',
-                                                'admin' => 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 border-red-300 dark:border-red-700',
-                                                'member' => 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700',
-                                                default => 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-300 dark:border-neutral-600',
+                                                'owner' => 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 border-amber-300 dark:border-amber-700',
+                                                'admin' => 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 border-red-300 dark:border-red-700',
+                                                'member' => 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border-blue-300 dark:border-blue-700',
+                                                default => 'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/20 dark:text-neutral-400 border-neutral-300 dark:border-neutral-600',
                                             };
                                         @endphp
                                         <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded border {{ $roleBadge }}">
                                             {{ ucfirst($user['role']) }}
                                         </span>
                                         @if($user['bypass'])
-                                            <div class="text-[10px] text-neutral-400 dark:text-neutral-500 mt-0.5 italic">bypass</div>
+                                            <div class="text-[10px] text-neutral-600 dark:text-neutral-400 mt-0.5 italic">bypass</div>
                                         @endif
                                     </td>
 
@@ -228,7 +228,7 @@
                                                 >None</button>
                                             </div>
                                         @else
-                                            <span class="text-xs text-neutral-400 dark:text-neutral-600">—</span>
+                                            <span class="text-xs text-neutral-600 dark:text-neutral-400">—</span>
                                         @endif
                                     </td>
 
@@ -237,8 +237,8 @@
                                         {{-- Project cell --}}
                                         <td class="px-1.5 py-1.5 text-center border-r border-neutral-200 dark:border-coolgray-300">
                                             @if($user['bypass'])
-                                                <span class="text-xs text-neutral-400 dark:text-neutral-600 italic">bypass</span>
-                                            @else
+<span class="text-xs text-neutral-600 dark:text-neutral-400 italic">bypass</span>
+                                                @else
                                                 @php
                                                     $level = $permissions[$user['id']]['p_' . $project['id']] ?? 'none';
                                                     $origLevel = $originalPermissions[$user['id']]['p_' . $project['id']] ?? 'none';
@@ -266,7 +266,7 @@
                                         @foreach($project['environments'] as $env)
                                             <td class="px-1.5 py-1.5 text-center border-r border-neutral-200 dark:border-coolgray-300">
                                                 @if($user['bypass'])
-                                                    <span class="text-xs text-neutral-400 dark:text-neutral-600 italic">bypass</span>
+                                                    <span class="text-xs text-neutral-600 dark:text-neutral-400 italic">bypass</span>
                                                 @else
                                                     @php
                                                         $envLevel = $permissions[$user['id']]['e_' . $env['id']] ?? 'inherited';
