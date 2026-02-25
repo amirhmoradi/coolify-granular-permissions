@@ -103,6 +103,7 @@ class PermissionService
             $resource instanceof \App\Models\Project => static::hasProjectPermission($user, $resource, $permission),
             $resource instanceof \App\Models\Environment => static::hasEnvironmentPermission($user, $resource, $permission),
             static::isDatabase($resource) => static::checkDatabasePermission($user, $resource, $permission),
+            $resource instanceof \AmirhMoradi\CoolifyEnhanced\Models\Cluster => static::checkClusterPermission($user, $resource, $permission),
             default => static::hasRoleBypass($user),
         };
     }
@@ -144,6 +145,30 @@ class PermissionService
         }
 
         return static::hasEnvironmentPermission($user, $environment, $permission);
+    }
+
+    /**
+     * Check permission for a cluster (team-scoped).
+     *
+     * Clusters are team-scoped. Caller must verify team_id matches currentTeam.
+     * View: any team member. Update/delete: admin/owner only.
+     */
+    protected static function checkClusterPermission(User $user, $cluster, string $permission): bool
+    {
+        $team = $user->currentTeam();
+        if (! $team || $cluster->team_id !== $team->id) {
+            return false;
+        }
+
+        if (static::hasRoleBypass($user)) {
+            return true;
+        }
+
+        return match ($permission) {
+            'view' => true, // Any team member can view
+            'manage', 'update', 'delete' => false, // Requires admin/owner
+            default => false,
+        };
     }
 
     /**
