@@ -39,11 +39,13 @@
                         Networks
                     </a>
                 @endif
-                {{-- Appearance tab: enhanced UI theme toggle --}}
-                <a class="{{ request()->routeIs('settings.appearance') ? 'dark:text-white' : '' }}" {{ wireNavigate() }}
-                    href="{{ route('settings.appearance') }}">
-                    Appearance
-                </a>
+                {{-- Appearance tab: only visible to admins/owners --}}
+                @if (auth()->user()?->isAdmin() || auth()->user()?->isOwner())
+                    <a class="{{ request()->routeIs('settings.appearance') ? 'dark:text-white' : '' }}" {{ wireNavigate() }}
+                        href="{{ route('settings.appearance') }}">
+                        Appearance
+                    </a>
+                @endif
             @endif
             <div class="flex-1"></div>
         </nav>

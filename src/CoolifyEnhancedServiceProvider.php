@@ -4,6 +4,7 @@ namespace AmirhMoradi\CoolifyEnhanced;
 
 use AmirhMoradi\CoolifyEnhanced\Http\Middleware\InjectPermissionsUI;
 use AmirhMoradi\CoolifyEnhanced\Jobs\NetworkReconcileJob;
+use AmirhMoradi\CoolifyEnhanced\Models\EnhancedUiSettings;
 use AmirhMoradi\CoolifyEnhanced\Models\ManagedNetwork;
 use AmirhMoradi\CoolifyEnhanced\Scopes\EnvironmentPermissionScope;
 use AmirhMoradi\CoolifyEnhanced\Scopes\ProjectPermissionScope;
@@ -125,10 +126,13 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
                 if (! config('coolify-enhanced.enabled', false)) {
                     return false;
                 }
+
+                $default = (bool) config('coolify-enhanced.ui_theme.enabled', false);
+
                 try {
-                    return (bool) \AmirhMoradi\CoolifyEnhanced\Models\EnhancedUiSettings::get('enhanced_theme_enabled', false);
+                    return (bool) EnhancedUiSettings::get('enhanced_theme_enabled', $default);
                 } catch (\Throwable $e) {
-                    return false;
+                    return $default;
                 }
             }
         }

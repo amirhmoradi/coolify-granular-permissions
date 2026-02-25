@@ -3,6 +3,7 @@
 namespace AmirhMoradi\CoolifyEnhanced\Livewire;
 
 use AmirhMoradi\CoolifyEnhanced\Models\EnhancedUiSettings;
+use Illuminate\Contracts\View\View;
 use Livewire\Component;
 
 /**
@@ -25,7 +26,8 @@ class AppearanceSettings extends Component
             abort(403);
         }
 
-        $this->enhancedThemeEnabled = (bool) EnhancedUiSettings::get('enhanced_theme_enabled', false);
+        $default = (bool) config('coolify-enhanced.ui_theme.enabled', false);
+        $this->enhancedThemeEnabled = (bool) EnhancedUiSettings::get('enhanced_theme_enabled', $default);
     }
 
     public function saveEnhancedTheme(): void
@@ -34,7 +36,7 @@ class AppearanceSettings extends Component
         $this->dispatch('success', $this->enhancedThemeEnabled ? 'Enhanced theme enabled. Reload the page to see changes.' : 'Enhanced theme disabled. Reload the page to see changes.');
     }
 
-    public function render()
+    public function render(): View
     {
         return view('coolify-enhanced::livewire.appearance-settings');
     }

@@ -864,7 +864,7 @@ An optional corporate-grade modern UI theme with a refined color palette and lig
 - **Light mode** — warm off-white base (#FAFAF9), soft grays, single accent (indigo).
 - **Dark mode** — near-black base (#0F0F0F), layered grays, same accent.
 
-See [Enhanced UI Theme](docs/features/enhanced-ui-theme/README.md) for file list and design docs.
+See [Enhanced UI Theme](docs/features/enhanced-ui-theme/README.md) for feature overview, and [PRD](docs/features/enhanced-ui-theme/PRD.md) / [plan](docs/features/enhanced-ui-theme/plan.md) for full implementation details.
 
 ---
 
@@ -1206,6 +1206,7 @@ Each feature has detailed documentation under `docs/features/<feature-name>/`:
 | Network Management | [`docs/features/network-management/`](docs/features/network-management/) | PRD, implementation plan, feature overview |
 | MCP Server | [`docs/features/mcp-server/`](docs/features/mcp-server/) | PRD, implementation plan, feature overview |
 | Cluster Management | [`docs/features/cluster-management/`](docs/features/cluster-management/) | PRD, implementation plan, feature overview |
+| Enhanced UI Theme | [`docs/features/enhanced-ui-theme/`](docs/features/enhanced-ui-theme/) | PRD, implementation plan, feature overview |
 
 Each feature folder contains:
 - **PRD.md** — Product Requirements Document (problem, goals, design, rationale, risks)

@@ -7,6 +7,12 @@ use Illuminate\Support\Facades\Cache;
 
 class EnhancedUiSettings extends Model
 {
+    private const CACHE_TTL_SECONDS = 60;
+
+    private const BOOLEAN_TRUE_VALUES = ['1', 'true', 'yes', 'on'];
+
+    private const BOOLEAN_FALSE_VALUES = ['0', 'false', 'no', 'off'];
+
     protected $table = 'enhanced_ui_settings';
 
     protected $fillable = ['key', 'value'];
@@ -16,9 +22,9 @@ class EnhancedUiSettings extends Model
      */
     public static function get(string $key, mixed $default = null): mixed
     {
-        $cacheKey = 'enhanced_ui_settings:'.$key;
+        $cacheKey = self::cacheKey($key);
 
-        return Cache::remember($cacheKey, 60, function () use ($key, $default) {
+        return Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($key, $default) {
             $row = static::query()->where('key', $key)->first();
 
             if (! $row) {
@@ -26,10 +32,15 @@ class EnhancedUiSettings extends Model
             }
 
             $value = $row->value;
-            if ($value === 'true' || $value === '1') {
+            if ($value === null) {
+                return $default;
+            }
+
+            $normalized = strtolower(trim((string) $value));
+            if (in_array($normalized, self::BOOLEAN_TRUE_VALUES, true)) {
                 return true;
             }
-            if ($value === 'false' || $value === '0') {
+            if (in_array($normalized, self::BOOLEAN_FALSE_VALUES, true)) {
                 return false;
             }
 
@@ -47,6 +58,11 @@ class EnhancedUiSettings extends Model
             ['key' => $key],
             ['value' => $stringValue]
         );
-        Cache::forget('enhanced_ui_settings:'.$key);
+        Cache::forget(self::cacheKey($key));
+    }
+
+    protected static function cacheKey(string $key): string
+    {
+        return 'enhanced_ui_settings:'.$key;
     }
 }

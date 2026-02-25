@@ -8,6 +8,7 @@ Optional corporate-grade modern UI theme for Coolify. Activatable under **Settin
 - **Light and dark modes** — warm neutrals (light) and near-black layered grays (dark) with a single accent.
 - **Same base framework** — Tailwind; theme overrides tokens and key selectors when enabled.
 - **Instance-wide** — preference stored in `enhanced_ui_settings`; reload the page after toggling.
+- **Admin-controlled** — Appearance tab is visible to owner/admin users.
 
 ## Components
 
@@ -17,7 +18,7 @@ Optional corporate-grade modern UI theme for Coolify. Activatable under **Settin
 | `enhanced_theme_enabled()` | Global helper used by the base layout overlay to decide whether to inject theme CSS/script. |
 | Settings > Appearance | Livewire page with one toggle; saves to `EnhancedUiSettings`. |
 | Base layout overlay | Injects `<link href=".../theme.css">` and `data-ce-theme="enhanced"` on `<html>` when enabled. |
-| `theme.css` | Scoped overrides under `[data-ce-theme="enhanced"]` and `.dark [data-ce-theme="enhanced"]`. |
+| `theme.css` | Scoped overrides under `html[data-ce-theme="enhanced"]` and `html.dark[data-ce-theme="enhanced"]`. |
 
 ## File list
 
@@ -35,5 +36,7 @@ Optional corporate-grade modern UI theme for Coolify. Activatable under **Settin
 
 ## Related docs
 
-- Design: `docs/plans/2025-02-25-enhanced-ui-theme-design.md`
-- Implementation plan: `docs/plans/2025-02-25-enhanced-ui-theme-implementation-plan.md`
+- [PRD.md](PRD.md) — Product requirements and acceptance criteria
+- [plan.md](plan.md) — Technical implementation plan and verification checklist
+- Legacy design notes: `docs/plans/2025-02-25-enhanced-ui-theme-design.md`
+- Legacy implementation notes: `docs/plans/2025-02-25-enhanced-ui-theme-implementation-plan.md`

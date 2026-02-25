@@ -58,11 +58,11 @@ Optional corporate-grade theme applied via scoped CSS (`[data-ce-theme="enhanced
 - `src/Livewire/AppearanceSettings.php` — Settings > Appearance page with toggle; `instantSave="saveEnhancedTheme"`
 - `src/Overrides/Views/layouts/base.blade.php` — Full copy of Coolify base; conditional theme link + `data-ce-theme` script
 - `resources/assets/theme.css` — Scoped overrides for light and dark modes
-- Global helper `enhanced_theme_enabled()` — Used by base layout overlay; returns false if package disabled or DB setting off
+- Global helper `enhanced_theme_enabled()` — Used by base layout overlay; returns false if package is disabled and uses DB value with config fallback (`coolify-enhanced.ui_theme.enabled`)
 
-**Pitfall:** Base layout overlay is a full copy; keep in sync with Coolify upstream when layout changes.
+**Pitfalls:** Base layout overlay is a full copy; keep in sync with Coolify upstream. Keep Appearance tab visibility aligned with route/component auth (owner/admin only) to avoid navigation dead-ends for other roles.
 
-See `docs/features/enhanced-ui-theme/` for design, plan, and README.
+See `docs/features/enhanced-ui-theme/` for PRD, plan, and README.
 
 ### Cluster Management Architecture
 
