@@ -4,6 +4,7 @@ namespace AmirhMoradi\CoolifyEnhanced;
 
 use AmirhMoradi\CoolifyEnhanced\Http\Middleware\InjectPermissionsUI;
 use AmirhMoradi\CoolifyEnhanced\Jobs\NetworkReconcileJob;
+use AmirhMoradi\CoolifyEnhanced\Models\EnhancedUiSettings;
 use AmirhMoradi\CoolifyEnhanced\Models\ManagedNetwork;
 use AmirhMoradi\CoolifyEnhanced\Scopes\EnvironmentPermissionScope;
 use AmirhMoradi\CoolifyEnhanced\Scopes\ProjectPermissionScope;
@@ -48,6 +49,9 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'coolify-enhanced');
 
+        $this->registerEnhancedThemeHelper();
+
+        // Load routes
         // Load API routes (web routes are loaded in register() to precede Coolify's catch-all)
         $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
 
@@ -67,6 +71,11 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__.'/../resources/views' => resource_path('views/vendor/coolify-enhanced'),
         ], 'coolify-enhanced-views');
+
+        // Publish enhanced UI theme CSS (for local/dev when not using Docker)
+        $this->publishes([
+            __DIR__.'/../resources/assets/theme.css' => public_path('vendor/coolify-enhanced/theme.css'),
+        ], 'coolify-enhanced-theme');
 
         // Register global scopes to filter resources based on permissions
         $this->registerScopes();
@@ -104,6 +113,29 @@ class CoolifyEnhancedServiceProvider extends ServiceProvider
             $this->registerUserMacros();
             $this->extendS3StorageModel();
         });
+    }
+
+    /**
+     * Register global helper for enhanced UI theme (used by base layout overlay).
+     */
+    protected function registerEnhancedThemeHelper(): void
+    {
+        if (! function_exists('enhanced_theme_enabled')) {
+            function enhanced_theme_enabled(): bool
+            {
+                if (! config('coolify-enhanced.enabled', false)) {
+                    return false;
+                }
+
+                $default = (bool) config('coolify-enhanced.ui_theme.enabled', false);
+
+                try {
+                    return (bool) EnhancedUiSettings::get('enhanced_theme_enabled', $default);
+                } catch (\Throwable $e) {
+                    return $default;
+                }
+            }
+        }
     }
 
     /**

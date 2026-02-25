@@ -26,6 +26,7 @@ Coolify v4 is an excellent self-hosted PaaS, but ships with a few limitations fo
 | **Network isolation** | All containers share a single flat Docker network | Per-environment bridge networks, dedicated proxy network, cross-env shared networks, Docker Swarm overlay support |
 | **MCP Server (AI Assistant Integration)** | None | 119+ MCP tools covering all Coolify (and Coolify Enhanced) API endpoints |
 | **Cluster management** | Checkbox-only Swarm config, no dashboard, no node management | Full cluster dashboard, node management, service/task viewer, visualizer, secrets/configs, structured deploy config |
+| **UI theme** | Single default look | Optional corporate-grade modern theme (light/dark) — Settings > Appearance, off by default |
 
 
 All features are **independent** — enable only what you need. When disabled, Coolify behaves exactly as stock.
@@ -46,6 +47,7 @@ All features are **independent** — enable only what you need. When disabled, C
   - [Network Management](#6-network-management)
   - [MCP Server](#7-mcp-server)
   - [Cluster Management](#8-cluster-management)
+  - [Enhanced UI Theme](#9-enhanced-ui-theme)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [API Reference](#api-reference)
@@ -122,6 +124,12 @@ All features are **independent** — enable only what you need. When disabled, C
 - **K8s-ready architecture** — orchestrator abstraction layer (`ClusterDriverInterface`) for future Kubernetes support
 - **20 MCP tools** for AI-driven cluster management
 - **Status notifications** — alerts when clusters degrade or become unreachable
+
+### Enhanced UI Theme
+- **Optional corporate-grade theme** — modern, sophisticated color palette; light and dark modes
+- **CSS and minimal JS only** — no structural changes; same layout and framework (Tailwind)
+- **Settings > Appearance** — single toggle "Use enhanced theme"; **disabled by default**
+- **Instance-wide** — preference stored in database; reload the page after toggling to see changes
 
 ### MCP Server (AI Assistant Integration)
 - **119+ MCP tools** wrapping all Coolify API endpoints for AI-driven infrastructure management
@@ -847,6 +855,18 @@ All Docker commands execute via SSH through Coolify's `instant_remote_process()`
 
 See the full [Cluster Management documentation](docs/features/cluster-management/) for PRD, implementation plan, and detailed feature overview.
 
+### 9. Enhanced UI Theme
+
+An optional corporate-grade modern UI theme with a refined color palette and light/dark modes. **No structural changes** — CSS and minimal JavaScript only; same layout and Tailwind framework.
+
+- **Settings > Appearance** — single toggle "Use enhanced theme"; **disabled by default**.
+- **Instance-wide** — preference stored in the database; reload the page after toggling to see changes.
+- **Design direction** — Linear-inspired modern SaaS system with restrained accent usage and high-contrast hierarchy.
+- **Light mode** — clean enterprise surfaces (`#F5F7FB` base) with crisp borders.
+- **Dark mode** — deep neutrals (`#080B12` base) with layered surfaces for clarity.
+
+See [Enhanced UI Theme](docs/features/enhanced-ui-theme/README.md) for feature overview, and [PRD](docs/features/enhanced-ui-theme/PRD.md) / [plan](docs/features/enhanced-ui-theme/plan.md) for full implementation details.
+
 ---
 
 ## Installation
@@ -1187,6 +1207,7 @@ Each feature has detailed documentation under `docs/features/<feature-name>/`:
 | Network Management | [`docs/features/network-management/`](docs/features/network-management/) | PRD, implementation plan, feature overview |
 | MCP Server | [`docs/features/mcp-server/`](docs/features/mcp-server/) | PRD, implementation plan, feature overview |
 | Cluster Management | [`docs/features/cluster-management/`](docs/features/cluster-management/) | PRD, implementation plan, feature overview |
+| Enhanced UI Theme | [`docs/features/enhanced-ui-theme/`](docs/features/enhanced-ui-theme/) | PRD, implementation plan, feature overview |
 
 Each feature folder contains:
 - **PRD.md** — Product Requirements Document (problem, goals, design, rationale, risks)
