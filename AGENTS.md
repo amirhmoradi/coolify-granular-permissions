@@ -24,6 +24,7 @@ This is a **Laravel package** that extends Coolify v4 with:
 7. **MCP Server** — Model Context Protocol server enabling AI assistants to manage Coolify infrastructure via natural language
 8. **Cluster Management** — Docker Swarm cluster dashboard, node management, service/task monitoring, cluster visualizer, Swarm secrets/configs, structured deployment config, and K8s-ready abstraction layer
 9. **Enhanced UI Theme** — Optional corporate-grade UI themes (CSS + minimal JS only); multiple selectable themes (Linear-inspired, TailAdmin-inspired); Settings > Appearance dropdown; disabled by default; `active_theme` slug in `enhanced_ui_settings` table
+10. **Additional Build Types** — Railpack, Heroku Buildpacks, and Paketo Buildpacks as build options alongside Nixpacks/Dockerfile/Docker Compose/Static; on-demand Railpack install; `pack` CLI for Heroku/Paketo; per-type deploy methods in `ApplicationDeploymentJob`
 
 It does NOT modify Coolify directly but extends it via Laravel's service provider and policy override system. For encryption, backup, classification, template, and network features, modified Coolify files are overlaid in the Docker image. The MCP server is a standalone TypeScript/Node.js package in `mcp-server/`.
 
@@ -442,6 +443,26 @@ Modified Coolify files that are copied over originals in the Docker image:
 - `@if ($hasMultiPortProxy)` branch shows per-port table with checkboxes and public port inputs
 - Falls back to original single-port toggle when multi-port is not available
 
+**BuildPackTypes** (`Overrides/Enums/BuildPackTypes.php`)
+- Adds 3 new enum cases: `RAILPACK`, `HEROKU`, `PAKETO` to Coolify's build type enum
+
+**ApplicationDeploymentJob** (`Overrides/Jobs/ApplicationDeploymentJob.php`)
+- Full overlay of Coolify's deployment job (~4300 lines)
+- Adds routing in `decide_what_to_do()` for railpack, heroku, paketo build types
+- Adds `deploy_railpack_buildpack()`, `build_railpack_image()` for Railpack builds
+- Adds `deploy_cnb_buildpack()`, `build_cnb_image()` for Heroku/Paketo (Cloud Native Buildpack) builds
+- Modifies `deploy_pull_request()` to handle new build types in PR deploys
+- Railpack installed on-demand via curl; `pack` CLI pre-installed in helper image
+- Mark all changes with `[COOLIFY ENHANCED: ...]` comments
+
+**general.blade.php** (`Overrides/Views/livewire/project/application/general.blade.php`)
+- Full copy of Coolify's application general settings view
+- Adds Railpack, Heroku Buildpacks, Paketo Buildpacks options to Build Pack dropdown
+
+**New Resource Views** (`Overrides/Views/livewire/project/new/*.blade.php`)
+- `public-git-repository.blade.php`, `github-private-repository.blade.php`, `github-private-repository-deploy-key.blade.php`
+- Each adds the 3 new build type options to their Build Pack dropdown
+
 ### Policies
 
 All policies follow the same pattern:
@@ -762,6 +783,14 @@ PermissionService::grantEnvironmentAccess($user, $environment, 'view_only');
 28. **Service/Index.php overlay size** — ~560 lines, full copy of Coolify's original. Multi-port changes are marked with `[MULTI-PORT PROXY OVERLAY]` comments. Keep in sync with upstream.
 29. **Multi-port nginx** — `StartDatabaseProxy::handleMultiPort()` generates multiple `server` blocks in one nginx `stream` context. All ports share one proxy container. `StopDatabaseProxy` needs no changes (just `docker rm -f`).
 30. **Cluster web routes must precede Coolify's catch-all** — Coolify's `routes/web.php` ends with `Route::any('/{any}', ...)` redirecting to HOME. If package web routes are loaded in `boot()` after `RouteServiceProvider::boot()`, `GET /clusters` and `GET /cluster/{uuid}` match the catch-all and cause "too many redirects". Load web routes in `register()` when enabled so they are registered before any provider's `boot()`. See `docs/features/cluster-management/REDIRECT_LOOP_INVESTIGATION.md`.
+31. **`ApplicationDeploymentJob.php` is the largest overlay** — ~4300 lines. All enhanced changes marked with `[COOLIFY ENHANCED: ...]` comments. Must be synced carefully with upstream. Changes are in 3 locations: `decide_what_to_do()` routing, `deploy_pull_request()` build branching, and 4 new methods appended at end.
+32. **Railpack installed on-demand** — `curl -fsSL https://raw.githubusercontent.com/railwayapp/railpack/main/install.sh | bash` runs inside the helper container each deploy. Adds ~2-3s. Binary discarded when helper container removed. Future optimization: custom helper image.
+33. **`pack` CLI already in helper image** — Heroku and Paketo builds use the `pack` binary at `/usr/local/bin/pack` (v0.38.2) pre-installed in `coolify-helper`. No helper image changes needed.
+34. **`pack build --docker-host inherit` is required** — Without it, `pack` tries its own Docker connection. Inside the helper container, Docker socket is already mounted; `inherit` uses the host daemon.
+35. **Builder images are large** — `heroku/builder:24` ~500MB, `paketobuildpacks/builder-jammy-base` ~800MB. First deploy pulls the image (slow). Subsequent deploys use cache.
+36. **`could_set_build_commands()` returns false for new types** — Correct behavior. Railpack, Heroku, Paketo all auto-detect. Users don't need install/build/start commands.
+37. **Environment variables use `nixpacks_environment_variables` relationship** — Despite the name, this relationship returns build-time env vars for any build type. Both `pack --env` and `railpack --env` accept the same format.
+38. **New resource creation Livewire components need NO overlay** — `updatedBuildPack()` in `PublicGitRepository.php`, `GithubPrivateRepository.php`, `GithubPrivateRepositoryDeployKey.php` handle unknown build types gracefully. Only the Blade views need overlays for dropdown options.
 
 ## Coolify Source Reference
 

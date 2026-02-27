@@ -4,7 +4,7 @@
 [![Build and Publish Docker Image](https://github.com/amirhmoradi/coolify-enhanced/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/amirhmoradi/coolify-enhanced/actions/workflows/docker-publish.yml)
 [![Docker Image](https://img.shields.io/badge/ghcr.io-coolify--enhanced-blue)](https://ghcr.io/amirhmoradi/coolify-enhanced)
 
-**The missing enterprise features for Coolify v4 — granular permissions, encrypted backups, volume/config backups, custom service templates, enhanced database classification, Docker network isolation, and Docker Swarm cluster management.**
+**The missing enterprise features for Coolify v4 — granular permissions, encrypted backups, volume/config backups, custom service templates, enhanced database classification, Docker network isolation, Docker Swarm cluster management, and additional build types (Railpack, Heroku/Paketo Buildpacks).**
 
 Coolify Enhanced is a drop-in addon for [Coolify](https://coolify.io) that adds access control, backup security, template extensibility, and Docker Swarm cluster management that teams need when running Coolify in production. It installs in under 2 minutes, requires zero changes to your existing setup, and can be removed cleanly at any time.
 
@@ -27,6 +27,7 @@ Coolify v4 is an excellent self-hosted PaaS, but ships with a few limitations fo
 | **MCP Server (AI Assistant Integration)** | None | 119+ MCP tools covering all Coolify (and Coolify Enhanced) API endpoints |
 | **Cluster management** | Checkbox-only Swarm config, no dashboard, no node management | Full cluster dashboard, node management, service/task viewer, visualizer, secrets/configs, structured deploy config |
 | **UI theme** | Single default look | Multiple selectable themes — Default (Coolify), Enhanced (Linear), TailAdmin — Settings > Appearance; stock Coolify by default |
+| **Build options** | Nixpacks, Dockerfile, Docker Compose, Static only | Railpack, Heroku Buildpacks, and Paketo Buildpacks as additional build options alongside the standard choices |
 
 
 All features are **independent** — enable only what you need. When disabled, Coolify behaves exactly as stock.
@@ -48,6 +49,7 @@ All features are **independent** — enable only what you need. When disabled, C
   - [MCP Server](#7-mcp-server)
   - [Cluster Management](#8-cluster-management)
   - [Enhanced UI Theme](#9-enhanced-ui-theme)
+  - [Additional Build Types](#10-additional-build-types)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [API Reference](#api-reference)
@@ -130,6 +132,13 @@ All features are **independent** — enable only what you need. When disabled, C
 - **CSS-only** — no DOM changes; same layout and framework (Tailwind); fonts self-hosted (WOFF2 in image)
 - **Settings > Appearance** — theme dropdown; **Default (Coolify)** by default
 - **Instance-wide** — admin-controlled; preference stored in database; reload after changing to see updates
+
+### Additional Build Types
+- **Railpack, Heroku Buildpacks, and Paketo Buildpacks** as build options alongside Nixpacks, Dockerfile, Docker Compose, and Static
+- Railpack — installed on-demand per deploy; zero-config Rails/Ruby builds
+- Heroku Buildpacks — Cloud Native Buildpacks via `heroku/builder`; standard `pack` CLI
+- Paketo Buildpacks — Cloud Native Buildpacks via `paketobuildpacks/builder`; Java, Node, Go, and more
+- Build Pack dropdown available on application General settings and New Resource pages
 
 ### MCP Server (AI Assistant Integration)
 - **119+ MCP tools** wrapping all Coolify API endpoints for AI-driven infrastructure management
@@ -870,6 +879,20 @@ Preference is stored in the database; reload the page after changing themes to s
 
 See [Enhanced UI Theme](docs/features/enhanced-ui-theme/README.md) for feature overview, and [PRD](docs/features/enhanced-ui-theme/PRD.md) / [plan](docs/features/enhanced-ui-theme/plan.md) for full implementation details.
 
+### 10. Additional Build Types
+
+Coolify supports Nixpacks, Dockerfile, Docker Compose, and Static builds out of the box. Coolify Enhanced adds three additional build options:
+
+| Type | Description |
+|------|-------------|
+| **Railpack** | Railway's buildpack for Rails/Ruby apps; installed on-demand per deploy |
+| **Heroku Buildpacks** | Cloud Native Buildpacks via `heroku/builder:24`; Node, Python, Ruby, Go, PHP, Java |
+| **Paketo Buildpacks** | Cloud Native Buildpacks via `paketobuildpacks/builder-jammy-base`; broad language support |
+
+All three appear in the Build Pack dropdown on the application General settings page and when creating new resources from public Git, GitHub private, or GitHub deploy-key repositories. No configuration changes required — select the build type and deploy.
+
+See [Additional Build Types](docs/features/additional-build-types/) for full documentation.
+
 ---
 
 ## Installation
@@ -1126,9 +1149,9 @@ Coolify Enhanced is a **Laravel package** that extends Coolify via its service p
 | Mechanism | Used For |
 |-----------|----------|
 | **Policy overrides** via `Gate::policy()` in `$app->booted()` | Granular permissions — replaces Coolify's permissive defaults |
-| **View overlays** — modified copies of Coolify Blade views | Backup sidebar items, encryption form, template source labels |
+| **View overlays** — modified copies of Coolify Blade views | Backup sidebar items, encryption form, template source labels, build type dropdown (general.blade.php, New Resource views) |
 | **Middleware injection** | Access Matrix on Team Admin page, Clusters sidebar link |
-| **File overlays in Docker image** | Encryption-aware backup/restore jobs, custom template loading, expanded database classification |
+| **File overlays in Docker image** | Encryption-aware backup/restore jobs, custom template loading, expanded database classification, additional build types (ApplicationDeploymentJob, BuildPackTypes enum) |
 | **S6-overlay service** | Auto-run database migrations on container start |
 
 ### Database Schema (Additions)
@@ -1212,6 +1235,7 @@ Each feature has detailed documentation under `docs/features/<feature-name>/`:
 | MCP Server | [`docs/features/mcp-server/`](docs/features/mcp-server/) | PRD, implementation plan, feature overview |
 | Cluster Management | [`docs/features/cluster-management/`](docs/features/cluster-management/) | PRD, implementation plan, feature overview |
 | Enhanced UI Theme | [`docs/features/enhanced-ui-theme/`](docs/features/enhanced-ui-theme/) | PRD, implementation plan, feature overview |
+| Additional Build Types | [`docs/features/additional-build-types/`](docs/features/additional-build-types/) | PRD, implementation plan, feature overview |
 
 Each feature folder contains:
 - **PRD.md** — Product Requirements Document (problem, goals, design, rationale, risks)

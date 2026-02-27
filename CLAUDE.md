@@ -26,6 +26,7 @@ This is a Laravel package that extends Coolify v4 with three main features:
 7. **MCP Server** — Model Context Protocol server enabling AI assistants (Claude Desktop, Cursor, VS Code) to manage Coolify infrastructure via natural language
 8. **Cluster Management** — Comprehensive Docker Swarm cluster dashboard, node management, service/task monitoring, cluster visualizer, Swarm secrets/configs, and structured deployment configuration with K8s-ready abstraction layer
 9. **Enhanced UI Theme** — Optional corporate-grade UI themes (CSS + minimal JS only); multiple selectable themes including Linear-inspired and TailAdmin-inspired; activatable in Settings > Appearance; disabled by default
+10. **Additional Build Types** — Railpack, Heroku Buildpacks, and Paketo Buildpacks as build options alongside existing types; on-demand Railpack install; `pack` CLI for Heroku/Paketo
 
 It does NOT modify Coolify directly but extends it via Laravel's service provider and policy override system. For encryption and backup features, modified Coolify files are overlaid in the Docker image. The MCP server is a standalone TypeScript/Node.js package in `mcp-server/`.
 
@@ -282,10 +283,13 @@ coolify-enhanced/
 │   ├── Overrides/                             # Modified Coolify files (overlay)
 │   │   ├── Actions/Database/
 │   │   │   └── StartDatabaseProxy.php         # Expanded database port mapping
+│   │   ├── Enums/
+│   │   │   └── BuildPackTypes.php             # Additional build type enum cases
 │   │   ├── Models/
 │   │   │   └── ServiceDatabase.php            # Wire-compatible type mappings
 │   │   ├── Jobs/
-│   │   │   └── DatabaseBackupJob.php          # Encryption + classification-aware backup
+│   │   │   ├── DatabaseBackupJob.php          # Encryption + classification-aware backup
+│   │   │   └── ApplicationDeploymentJob.php   # Additional build type deploy methods
 │   │   ├── Livewire/Project/Database/
 │   │   │   └── Import.php                     # Encryption-aware restore
 │   │   ├── Livewire/Project/Service/
@@ -295,7 +299,8 @@ coolify-enhanced/
 │   │   │   │   └── show.blade.php             # Storage page with encryption form
 │   │   │   ├── livewire/settings-backup.blade.php   # Settings backup with instance file backup
 │   │   │   ├── livewire/project/application/
-│   │   │   │   └── configuration.blade.php    # App config + Resource Backups sidebar
+│   │   │   │   ├── configuration.blade.php    # App config + Resource Backups sidebar
+│   │   │   │   └── general.blade.php          # App general settings + build type dropdown
 │   │   │   ├── livewire/project/database/
 │   │   │   │   └── configuration.blade.php    # DB config + Resource Backups sidebar
 │   │   │   ├── livewire/project/service/
@@ -509,6 +514,9 @@ coolify-enhanced/
 | `src/Livewire/SwarmConfigForm.php` | Structured Swarm deployment config (replaces YAML textarea) |
 | `src/Http/Controllers/Api/ClusterController.php` | Cluster management REST API |
 | `src/Policies/ClusterPolicy.php` | Cluster access policy (team-scoped) |
+| `src/Overrides/Enums/BuildPackTypes.php` | Additional build type enum (railpack, heroku, paketo) |
+| `src/Overrides/Jobs/ApplicationDeploymentJob.php` | Deployment job overlay with railpack, heroku, paketo build methods |
+| `src/Overrides/Views/livewire/project/application/general.blade.php` | App settings view with additional build type dropdown options |
 
 ### Development Commands
 
@@ -680,6 +688,10 @@ Two approaches are used to add UI components to Coolify pages:
 90. **Swarm node inspect returns NanoCPUs** — CPU count from `docker node inspect` is in nanoseconds (1 CPU = 1e9 NanoCPUs). Divide by 1e9 for core count.
 91. **Enhanced UI theme is multi-theme** — `getActiveTheme()` returns validated slug from DB with config fallback (empty = no theme). Theme CSS must be scoped to `html[data-ce-theme="SLUG"]`. Self-hosted fonts via `@font-face` in theme CSS (no external CDN). Config `ui_theme.themes` registry validates theme slugs. `isThemeEnabled()` is backward-compatible (delegates to `isThemeActive()`). Base layout overlay loads theme CSS dynamically by slug and sets `data-ce-theme` attribute.
 92. **Cluster web routes must precede Coolify's catch-all** — Coolify's `routes/web.php` ends with `Route::any('/{any}', ...)` which redirects to HOME. If package web routes are registered after that (e.g. in `boot()` after `RouteServiceProvider::boot()`), `GET /clusters` and `GET /cluster/{uuid}` match the catch-all and cause "too many redirects". Web routes are loaded in `register()` when enabled so they are registered before any provider's `boot()`. See `docs/features/cluster-management/REDIRECT_LOOP_INVESTIGATION.md`.
+93. **`ApplicationDeploymentJob.php` overlay is the largest** — ~4300 lines. Changes in 3 locations: `decide_what_to_do()` routing, `deploy_pull_request()` build branching, and 4 new methods appended at end. All marked with `[COOLIFY ENHANCED: ...]` comments.
+94. **Railpack installed on-demand** — Downloaded via curl inside helper container each deploy (~2-3s). Binary discarded when container removed.
+95. **`pack` CLI pre-installed in helper** — Heroku/Paketo builds use existing `pack` binary in coolify-helper image. No helper image changes needed.
+96. **Builder images pulled on first use** — `heroku/builder:24` (~500MB) and `paketobuildpacks/builder-jammy-base` (~800MB) are pulled during the first deploy with that build type.
 
 ## Important Notes
 
@@ -706,6 +718,7 @@ Two approaches are used to add UI components to Coolify pages:
 21. **Cluster management is phased** - Phase 1: read-only visibility (zero overlays). Phase 2: write operations (one overlay). Phase 3: secrets/configs. Phase 4: integration + MCP
 22. **K8s-ready architecture** - `ClusterDriverInterface` contract decouples UI from orchestrator. Implement `KubernetesClusterDriver` to add K8s support without touching any UI code
 23. **Enhanced UI theme** - Optional corporate-grade themes (CSS + minimal JS only) via Settings > Appearance; multi-theme dropdown (enhanced, tailadmin); disabled by default; `active_theme` slug in `enhanced_ui_settings` table
+24. **Additional build types** — Railpack, Heroku Buildpacks, and Paketo Buildpacks added via overlay of `BuildPackTypes.php` enum + `ApplicationDeploymentJob.php` + UI Blade views
 
 ## See Also
 

@@ -119,6 +119,32 @@ COPY --chown=www-data:www-data src/Overrides/Views/livewire/project/service/inde
 COPY --chown=www-data:www-data src/Overrides/Views/livewire/project/new/select.blade.php \
     /var/www/html/resources/views/livewire/project/new/select.blade.php
 
+# =================================================================
+# Overlay: Additional build types (Railpack, Heroku, Paketo)
+# =================================================================
+
+# Override BuildPackTypes enum with additional build types
+COPY --chown=www-data:www-data src/Overrides/Enums/BuildPackTypes.php \
+    /var/www/html/app/Enums/BuildPackTypes.php
+
+# Override ApplicationDeploymentJob with additional build type support
+COPY --chown=www-data:www-data src/Overrides/Jobs/ApplicationDeploymentJob.php \
+    /var/www/html/app/Jobs/ApplicationDeploymentJob.php
+
+# Override application general view with additional build type options
+COPY --chown=www-data:www-data src/Overrides/Views/livewire/project/application/general.blade.php \
+    /var/www/html/resources/views/livewire/project/application/general.blade.php
+
+# Override new resource creation views with additional build type options
+COPY --chown=www-data:www-data src/Overrides/Views/livewire/project/new/public-git-repository.blade.php \
+    /var/www/html/resources/views/livewire/project/new/public-git-repository.blade.php
+
+COPY --chown=www-data:www-data src/Overrides/Views/livewire/project/new/github-private-repository.blade.php \
+    /var/www/html/resources/views/livewire/project/new/github-private-repository.blade.php
+
+COPY --chown=www-data:www-data src/Overrides/Views/livewire/project/new/github-private-repository-deploy-key.blade.php \
+    /var/www/html/resources/views/livewire/project/new/github-private-repository-deploy-key.blade.php
+
 # Copy the s6-overlay script for addon migrations
 COPY --chmod=755 docker/s6-overlay/s6-rc.d/addon-migration/ /etc/s6-overlay/s6-rc.d/addon-migration/
 

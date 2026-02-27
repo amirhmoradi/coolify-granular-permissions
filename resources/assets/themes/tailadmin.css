@@ -185,8 +185,16 @@ html[data-ce-theme="tailadmin"] .dark\:bg-coolgray-200 {
     background-color: var(--ta-surface-2) !important;
 }
 
+html[data-ce-theme="tailadmin"] .bg-white {
+    background-color: var(--ta-surface-1) !important;
+    border: 1px solid var(--ta-border) !important;
+    border-radius: 1rem !important;
+    box-shadow: var(--ta-shadow-sm) !important;
+}
+
 html.dark[data-ce-theme="tailadmin"] .bg-white {
     background-color: var(--ta-surface-1) !important;
+    border-color: var(--ta-border) !important;
 }
 
 html[data-ce-theme="tailadmin"] .border-neutral-200,
@@ -204,10 +212,46 @@ html[data-ce-theme="tailadmin"] .text-black {
     color: var(--ta-text-primary) !important;
 }
 
+html[data-ce-theme="tailadmin"] h1,
+html[data-ce-theme="tailadmin"] h2,
+html[data-ce-theme="tailadmin"] h3,
+html[data-ce-theme="tailadmin"] h4,
+html[data-ce-theme="tailadmin"] h5,
+html[data-ce-theme="tailadmin"] h6 {
+    color: var(--ta-text-primary) !important;
+}
+
+html[data-ce-theme="tailadmin"] .text-neutral-900 {
+    color: var(--ta-text-primary) !important;
+}
+
+html[data-ce-theme="tailadmin"] .text-neutral-800 {
+    color: var(--ta-gray-800) !important;
+}
+
+html.dark[data-ce-theme="tailadmin"] .text-neutral-800,
+html.dark[data-ce-theme="tailadmin"] .text-neutral-900 {
+    color: var(--ta-text-primary) !important;
+}
+
 html[data-ce-theme="tailadmin"] .dark\:text-neutral-400,
 html[data-ce-theme="tailadmin"] .text-neutral-600,
+html[data-ce-theme="tailadmin"] .text-neutral-500,
 html[data-ce-theme="tailadmin"] .subtitle {
     color: var(--ta-text-secondary) !important;
+}
+
+html[data-ce-theme="tailadmin"] .text-neutral-300,
+html[data-ce-theme="tailadmin"] .text-neutral-400 {
+    color: var(--ta-gray-400) !important;
+}
+
+html[data-ce-theme="tailadmin"] .dark\:text-neutral-700 {
+    color: var(--ta-gray-600) !important;
+}
+
+html[data-ce-theme="tailadmin"] .dark\:text-neutral-600 {
+    color: var(--ta-gray-500) !important;
 }
 
 html[data-ce-theme="tailadmin"] .text-coollabs,
