@@ -837,6 +837,18 @@ html[data-ce-theme="tailadmin"] .bg-neutral-200 { background-color: #e4e7ec !imp
 html[data-ce-theme="tailadmin"] .hover\:bg-neutral-100:hover { background-color: #f2f4f7 !important; }
 html[data-ce-theme="tailadmin"] .hover\:bg-neutral-200:hover { background-color: #e4e7ec !important; }
 html[data-ce-theme="tailadmin"] .hover\:bg-neutral-300:hover { background-color: #d0d5dd !important; }
+
+html.dark[data-ce-theme="tailadmin"] .bg-neutral-50 { background-color: var(--ta-bg) !important; }
+html.dark[data-ce-theme="tailadmin"] .bg-neutral-100 { background-color: var(--ta-surface-1) !important; }
+html.dark[data-ce-theme="tailadmin"] .bg-neutral-200 { background-color: var(--ta-surface-2) !important; }
+html.dark[data-ce-theme="tailadmin"] .hover\:bg-neutral-100:hover { background-color: var(--ta-surface-2) !important; }
+html.dark[data-ce-theme="tailadmin"] .hover\:bg-neutral-200:hover { background-color: var(--ta-border) !important; }
+html.dark[data-ce-theme="tailadmin"] .hover\:bg-neutral-300:hover { background-color: var(--ta-border) !important; }
+
+html.dark[data-ce-theme="tailadmin"] .border-neutral-400 { border-color: var(--ta-border) !important; }
+html.dark[data-ce-theme="tailadmin"] .bg-slate-900\/75 { background-color: rgba(12, 17, 29, 0.75) !important; }
+html.dark[data-ce-theme="tailadmin"] .bg-black\/20 { background-color: rgba(0, 0, 0, 0.4) !important; }
+html[data-ce-theme="tailadmin"] .hover\:bg-neutral-300:hover { background-color: #d0d5dd !important; }
 html.dark[data-ce-theme="tailadmin"] .dark\:hover\:bg-black:hover { background-color: rgba(255, 255, 255, 0.03) !important; }
 
 html[data-ce-theme="tailadmin"] .text-neutral-300 { color: #d0d5dd !important; }
@@ -850,10 +862,17 @@ html.dark[data-ce-theme="tailadmin"] .dark\:text-neutral-700 { color: #344054 !i
 html[data-ce-theme="tailadmin"] .border-neutral-300 { border-color: #d0d5dd !important; }
 html[data-ce-theme="tailadmin"] .border-neutral-400 { border-color: #98a2b3 !important; }
 
+html[data-ce-theme="tailadmin"] .text-gray-300 { color: #d0d5dd !important; }
 html[data-ce-theme="tailadmin"] .text-gray-400 { color: #98a2b3 !important; }
 html[data-ce-theme="tailadmin"] .text-gray-500 { color: #667085 !important; }
+html[data-ce-theme="tailadmin"] .text-gray-700 { color: #344054 !important; }
 html[data-ce-theme="tailadmin"] .text-gray-800 { color: #1d2939 !important; }
 html[data-ce-theme="tailadmin"] .hover\:text-gray-300:hover { color: #d0d5dd !important; }
+
+html.dark[data-ce-theme="tailadmin"] .text-gray-300 { color: #d0d5dd !important; }
+html.dark[data-ce-theme="tailadmin"] .text-gray-400 { color: #98a2b3 !important; }
+html.dark[data-ce-theme="tailadmin"] .text-gray-700 { color: #d0d5dd !important; }
+html.dark[data-ce-theme="tailadmin"] .text-gray-800 { color: #f2f4f7 !important; }
 
 html[data-ce-theme="tailadmin"] .bg-slate-900\/75 { background-color: rgba(12, 17, 29, 0.75) !important; }
 
